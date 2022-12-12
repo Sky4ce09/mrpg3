@@ -1,0 +1,46 @@
+memory documentation
+
+localCell
+0-7: multiplayer engine connection stuff, don't want to look too deep into it LMAO
+8: player input list, constructed by the connection manager (accessed by cConnectionManager and cInterfaceManager)
+9: turn counter (copy from server) (accessed by cConnectionManager to update, and cInterfaceManager)
+10: copy of cInputManager's "browsingItems" variable
+11: index of the browsed item's data
+12: the "go" signal for cInterfaceManager
+13: item count
+14: selected item data
+15: selected item stats
+16: copy of player data
+17: copy of player stats
+18: equipped weapon data
+19: equipped weapon stats
+20: equipped armor data
+21: equipped armor stats
+
+playerDataBank
+0-3: internal input management
+4-7: heartbeat updates
+8-15: player data entries
+58: server side signal for sEntityHandler (0 = ready, 1 = processing)
+59: map data (map count, base fog, current fog palette)
+60: turn counter
+61: input processor instructions
+62: player count
+63: player list
+64...: sets of 32 addresses dedicated to item data, can accomodate for 14 players in theory
+
+renderedMap
+508: fog data 1
+509: fog data 2
+510: x/y/w/h of player spawn, fog alternate count
+511: floor/wall palettes, enemy count
+
+funCell, the one cell i hoped to never implement
+0: function slot
+1...15: input parameters
+16...63: output values
+
+notes
+cInterfaceManager does NOT have access to server data! This is the only step forward I'm willing to implement security, though. Performance is king.
+empty entity memory must be -1
+players start with weaponIndex and armorIndex at their max values because the 16th item slot will go unused, allows for "hasEquipped" checking

@@ -1,0 +1,9 @@
+expect bank1
+# insert data
+# between comments i guess
+write -1 bank1 507
+awaitOrder:
+read orderToReload bank1 507
+jump awaitOrder equal orderToReload -1
+
+# https://editor.p5js.org/Sky4ce09/sketches/gPLfYnnBS

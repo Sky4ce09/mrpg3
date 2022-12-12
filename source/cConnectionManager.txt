@@ -1,0 +1,182 @@
+spl new players Players 1 * 4
+spl new playerInputs PlayerInputs 5 * 4
+spl new playerData PlayerData 10:T1024 2:HairType 2:BodyType 15:HairPalette 15:BodyPalette 2:Direction 5:LightBallLighting 1:Enabled
+spl new playerStats PlayerStats 12:PlayerHealth 12:PlayerHealthMax 4:ItemCount 16:Score 4:WeaponIndex 4:ArmorIndex
+
+spl new worldData WorldData 5 * 7 0:MapCount 1:FogDensity 2:FogR 3:FogG 4:FogB 5:FogA 6:FogRandA
+
+set connectUnit @mega
+set connectFlag 8080
+set dataFlag 847300
+expect cell1 display1
+set localCell cell1
+set renderCount 18 # amount of renderers, counted from 0
+op add finalSignal renderCount 3
+set minHeartbeatIndex 4 # where the heartbeat data begins
+set maxPlayerCount 4
+set minPlayerDataIndex 8
+set minItemDataIndex 64
+set itemSetSize 32
+connect:
+set timeoutStamp @time
+
+timeout:
+jump timeout lessThan @time timeoutStamp
+
+op add timeoutStamp timeoutStamp 2000
+uflag get any connectUnit connectFlag
+uflag 9124786
+# connection may be refused here if player count is max or the unit isn't hovering over a cell
+uflag await not 9124786
+sensor flag @unit @flag
+jump connect equal flag connectFlag
+# connection is successful and data is retrieved
+sensor x @unit @x
+sensor y @unit @y
+getLocationsCell:
+ucontrol getBlock x y type locationsCell # this cell stores the coordinates of important buildings, like other cells
+jump getLocationsCell notEqual type @memory-cell
+uflag connectFlag
+op mod playerIndex flag dataFlag # do this at the end to not clog the stream for too long
+write playerIndex localCell 0
+write x cell1 5 # for other processors to
+write y cell1 6 # verify the unit
+
+op mul playerDataIndex playerIndex 2
+op add playerDataIndex playerDataIndex minPlayerDataIndex
+op add playerStatsIndex playerDataIndex 1
+
+op mul itemDataIndexStart playerIndex itemSetSize
+op add itemDataIndexStart itemDataIndexStart minItemDataIndex
+op add itemDataIndexStop itemDataIndexStart itemSetSize
+
+# communicate the coordinates to the renderers
+set i 0
+transmitCoordinates:
+read x locationsCell i
+jump finishTransmission lessThan x 0 # equal x -1
+op add j i 1
+read y locationsCell j
+write x localCell 1
+write y localCell 2
+write 0 localCell 4
+write 1337 localCell 3 # tell processors to start reading data at this point
+fun have assignBlock
+timer start cancellation 60000
+timer loop cancellation
+read signals localCell 4
+jump addressFeedback equal signals finalSignal
+timer close
+write 420 localCell 3
+jump connect always # failed to transmit information, somehow...
+addressFeedback:
+op add i i 2
+jump transmitCoordinates always
+finishTransmission:
+write 69 localCell 3
+wait 400 # DREAD
+write 0 localCell 4
+
+fun new assignBlock
+# in order
+op add @counter @counter i
+ucontrol getBlock x y type playerDataBank
+jump completeAssignment always
+ucontrol getBlock x y type mapBank1
+jump completeAssignment always
+ucontrol getBlock x y type mapBank2
+jump completeAssignment always
+ucontrol getBlock x y type mapBank3
+jump completeAssignment always
+ucontrol getBlock x y type mapBank4
+jump completeAssignment always
+ucontrol getBlock x y type mapBank5
+jump completeAssignment always
+ucontrol getBlock x y type mapBank6
+jump completeAssignment always
+ucontrol getBlock x y type mapBank7
+jump completeAssignment always
+ucontrol getBlock x y type mapBank8
+jump completeAssignment always
+ucontrol getBlock x y type mapBank9
+completeAssignment:
+fun close
+
+# the other processors now have all the coordinates so it'll be this processor's responsibility from this point onward to send heartbeats to the server
+op add heartbeatIndex playerIndex minHeartbeatIndex
+
+manageConnection:
+read players playerDataBank 63
+spl od slotIsTaken Players playerIndex
+jump sendHeartbeatAndInput notEqual slotIsTaken 0 # receive disconnect if 0, otherwise proceed with heartbeat
+
+# tell processors to reset
+write 420 localCell 3
+jump connect always
+
+sendHeartbeatAndInput:
+write 3 playerDataBank heartbeatIndex
+read worldData playerDataBank 59
+read playerCount playerDataBank 62
+spl of mapCount WorldData MapCount
+
+print "[\#83CDFB]mRPG 3: [\#1F9A33]Mythic Heroes\n[][]Players: "
+print playerCount
+print "\nConquering Area "
+print mapCount
+
+set playerInputs 0
+for i = 0 < 4 1
+read playerInput playerDataBank i
+spl wd playerInput PlayerInputs i
+next
+write playerInputs localCell 8
+
+set count 0
+for i = itemDataIndexStart < itemDataIndexStop 2
+read itemData playerDataBank i
+jump countItemsBreak equal itemData -1
+op add count count 1
+next
+countItemsBreak:
+write count localCell 13
+read itemDataIndex localCell 11
+read itemData playerDataBank itemDataIndex
+# copy for visual information
+write itemData localCell 14
+op add itemDataIndex itemDataIndex 1
+read itemData' playerDataBank itemDataIndex
+write itemData' localCell 15
+read playerData playerDataBank playerDataIndex
+write playerData localCell 16
+read playerStats playerDataBank playerStatsIndex
+write playerStats localCell 17
+spl of weaponIndex PlayerStats WeaponIndex
+op sub weaponData weaponIndex 1 # not really weapondata, im trying to save lines here
+set weaponStats -1
+jump writeWeaponData equal weaponIndex -1
+op mul weaponIndex weaponData 2
+op add weaponIndex weaponIndex minItemDataIndex
+op mul weaponIndexShift playerIndex itemSetSize
+op add weaponIndex weaponIndex weaponIndexShift
+op add weaponIndex' weaponIndex 1
+read weaponData playerDataBank weaponIndex
+read weaponStats playerDataBank weaponIndex'
+writeWeaponData:
+write weaponData localCell 18
+write weaponStats localCell 19
+spl of armorIndex PlayerStats ArmorIndex
+op sub armorData armorIndex 1
+set armorStats -1
+jump writeArmorData equal armorIndex -1
+op mul armorIndex armorData 2
+op add armorIndex armorIndex minItemDataIndex
+op mul armorIndexShift playerIndex itemSetSize
+op add armorIndex armorIndex armorIndexShift
+op add armorIndex' armorIndex 1
+read armorData playerDataBank armorIndex
+read armorStats playerDataBank armorIndex'
+writeArmorData:
+write armorData localCell 20
+write armorStats localCell 21
+jump manageConnection always

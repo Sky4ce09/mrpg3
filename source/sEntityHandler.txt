@@ -1,0 +1,967 @@
+spl new players Players 1 * 4
+# t1024, hairType, bodyType, hairPalette, bodyPalette, direction, lightBallLight, enabled...
+spl new playerData PlayerData 10:T1024 2:HairType 2:BodyType 15:HairPalette 15:BodyPalette 2:Direction 5:LightBallLighting 1:Enabled
+spl new playerData PackedPlayerData 10:T1024 36:RandomData
+spl new playerStats PlayerStats 12:PlayerHealth 12:PlayerHealthMax 4:ItemCount 16:Score 4:WeaponIndex 4:ArmorIndex
+
+spl new playerInput PlayerInput 5 * 2 0:Input 1:Data
+
+# instruction type, attached data (create: 1/disable: 2/enable all: 3, data index), last moved direction
+spl new inputProcessorInstruction InputProcessorInstruction 2:Type 4:Data
+# client-side essential world data (map count, visionReduction, fog palette (rgba and random added alpha)) (reminder to self: switch fog palettes server-side after a set amount of turns because we need cool effects!)
+
+spl new fogData FogData 5 5 5 5 5 5 8
+spl label FogData 0:Density 1:R 2:G 3:B 4:A 5:RandA 6:Duration
+spl new fogData PackedFogData 42:PackedValues 7:IgnoredValues
+spl new worldData WorldData 5 * 7 0:MapCount 1:FogDensity 2:FogR 3:FogG 4:FogB 5:FogA 6:FogRandA
+spl new worldData WorldDataFogInsert 5:SkippedValues 30:InsertFogData
+
+spl new mem510 Mem510 5 * 4 0:X 1:Y 2:Width 3:Height 4:FogTurnCount
+spl new mem511 Mem511 24:FloorPalette 24:WallPalette 12:EnemyCount
+
+spl new tileData TileData 11 * 4
+spl new subtileData SubtileData 2:Type 9:Content
+
+# item data lmao (type, floor alpha, quantity, effect, effectStrength) / effect / effect strength is used in special effects or consumable effects
+spl new itemData ItemData 10:T1024 8:ItemType 8:FloorAlpha 8:Quantity 4:Effect 8:EffectStrength
+# itemCategory, itemSubtype (categories 0: weapon, 1: armor, 2: consumable)
+spl new itemType ItemType 4 * 2 0:Category 1:Subtype
+# the splitter below will not see usage in rendering, remove it later
+# only for gear usage and leveling, gone unused by consumables
+spl new itemStats ItemStats 11 * 4 0:Value 1:ValueMax 2:Exp 3:ExpMax
+spl new itemStats ItemLevel 44:SkippedValues 4:Level 4:LevelMax
+
+spl new entityData EntityData 10 8 8 4 6 6 1 1 2
+spl label EntityData 0:T1024 1:EntityType 2:FloorAlpha 3:Effect 4:EffectTimer 5:EffectCooldown 6:EffectRequiresTargeting 7:ShotByPlayer 8:Owner # whether the projectile was shot by a player, give exp in case
+# hint: effects with a cooldown of 0 are strictly ondeath (cooldown of 1 achieves per-turn effect)
+# entityCategory, entitySubtype
+spl new entityType EntityType 4 * 2 0:Category 1:Subtype
+spl new entityStats EnemyStats 12:Health 12:HealthMax 12:Damage 10:Reward
+spl new entityStats ProjectileStats 12:Damage 4:BlastRadius 12:BlastDamage 2:MovementDirection
+
+spl new enemyBehavior EnemyBehavior 4 * 10 # half-bytes to determine behaviors for enemies
+spl new testOrder TestOrder 2 * 4
+spl new testOrders TestOrders 8 * 4
+spl new testOrders AllTestOrders 2 * 16
+
+# compute in order player-projectile-enemy-projectile
+
+expect cell1 cell2 bank1
+set funCell cell1
+set maxPlayerCount 4
+set minPlayerDataIndex 8
+op add maxPlayerDataIndex minPlayerDataIndex 8
+set mapSize 32
+op sub testLeftBorder mapSize 1
+op mul totalTiles mapSize mapSize
+set minItemDataIndex 64
+
+set levelupStatDiff 0.1
+set levelupExpDiff 0.25
+set playerBaseHealth 52
+set playerBaseDamage 13
+
+set allowDisabledPlayerExperience 1
+
+set testOrders 0b01001011000111101011010011001001 # up and right are swapped because the x-to-y comparisons require it to be this way
+set enemyBehavior 0x0001000010
+set enemySensorRadius 7.3
+for i = 0 < 5 1 # hint: read the numbers from left to right
+op sub i' 9 i
+spl od v1 EnemyBehavior i
+spl od v2 EnemyBehavior i'
+spl wd v1 EnemyBehavior i'
+spl wd v2 EnemyBehavior i
+next
+for i = 0 < 8 1
+op sub i' 15 i
+spl od v1 AllTestOrders i
+spl od v2 AllTestOrders i'
+spl wd v1 AllTestOrders i'
+spl wd v2 AllTestOrders i
+next
+
+mainLoop:
+read signal bank1 58
+jump mainLoop notEqual signal 1
+
+read worldData bank1 59
+spl of mapIndex WorldData MapCount
+op add mapIndex mapIndex 1 # playerDataBank is bank1 so there is need for offset
+getlink mapBank mapIndex
+
+# projectiles
+fun have simulateProjectileStep
+
+fun new simulateProjectileStep
+for entityDataIndex = 256 < 506 2
+set loopSec entityDataIndex
+
+read entityData mapBank entityDataIndex
+jump break1 equal entityData -2
+jump skipInstance1 equal entityData -1
+
+spl of t1024 EntityData T1024
+fun have getTile
+jump skipInstance1 notEqual type 3 # entities only, no items!
+
+spl of entityType EntityData EntityType
+spl of category EntityType Category
+jump skipInstance1 notEqual category 2 # only run through projectiles
+
+op add entityStatsIndex entityDataIndex 1
+read entityStats mapBank entityStatsIndex
+
+# spl of t1024 EntityData T1024 # duplicate
+spl of direction ProjectileStats MovementDirection
+set index 0
+fun have genericFunction
+jump tileIsValid notEqual valid 0
+set index 4
+fun have genericFunction
+jump skipInstance1
+
+tileIsValid:
+parr type # from getTile
+# floor - projectile is free to travel if there is no player
+frontTileIsFloor:
+for playerIndex = 0 < 4 1
+op mul playerDataIndex playerIndex 2
+op add playerDataIndex playerDataIndex minPlayerDataIndex
+op add playerStatsIndex playerDataIndex 1
+
+read playerData bank1 playerDataIndex
+read playerStats bank1 playerStatsIndex
+spl of t1024player PlayerData T1024
+jump projectileHitsPlayer equal t1024player t1024
+next
+jump peacefulProcedure
+
+projectileHitsPlayer:
+spl of damage ProjectileStats Damage
+fun have playerTakeDamage
+set index 4
+fun have genericFunction
+jump skipInstance1
+
+peacefulProcedure:
+spl of floorAlpha EntityData FloorAlpha
+
+set t1024store t1024old
+spl wf 0 SubtileData Type
+spl wf floorAlpha SubtileData Content
+fun have storeSubtileInTile
+
+storeProjectileSubtile:
+set t1024store t1024
+spl wf 3 SubtileData Type
+spl wf entityDataIndex SubtileData Content
+fun have storeSubtileInTile
+/
+# wall - destroy projectile
+set index 4
+fun have genericFunction
+/
+# item - swap positions with item
+spl of projectileFloorAlpha EntityData FloorAlpha
+set itemDataIndex content
+read itemData mapBank itemDataIndex
+spl of itemFloorAlpha ItemData FloorAlpha
+spl wf t1024old ItemData T1024
+spl wf t1024 EntityData T1024
+spl wf projectileFloorAlpha ItemData FloorAlpha
+spl wf itemFloorAlpha EntityData FloorAlpha
+write entityData mapBank entityDataIndex
+write itemData mapBank itemDataIndex
+
+set t1024store t1024old
+spl wf 2 SubtileData Type
+spl wf itemDataIndex SubtileData Content
+fun have storeSubtileInTile
+
+jump storeProjectileSubtile # duplicate code
+/
+# entity - various interactions
+fun have saveEntityData # tuck the projectile away for now
+set oldEntityDataIndex entityDataIndex
+set entityDataIndex content
+op add entityStatsIndex entityDataIndex 1
+read entityData mapBank entityDataIndex
+read entityStats mapBank entityStatsIndex
+spl of type EntityData EntityType
+spl of category EntityType Category
+spl of subtype EntityType Subtype
+fun have loadEntityData
+##
+parr category
+# crate/well/coin
+###
+parr subtype
+# crate
+fun have saveEntityData
+op rand random 1
+jump createRat lessThan random 0.125
+jump createSmallPotion lessThan random 0.275
+jump createLargePotion lessThan random 0.375
+jump createLightBall lessThan random 0.55
+jump createJavelin lessThan random 0.65
+jump createBomb lessThan random 0.6875
+# create coin
+set type 0b00110010
+set entityData 0
+spl wf type EntityData EntityType # this is all that is necessary for coins to work
+write entityData mapBank entityDataIndex
+write 0 mapBank entityStatsIndex
+jump finishCrateInteraction
+createRat:
+set type 0b00110000
+set index 2
+spl of t1024 EntityData T1024
+fun have genericFunction
+write entityData mapBank entityDataIndex
+write entityStats mapBank entityStatsIndex
+jump finishCrateInteraction
+createSmallPotion:
+set type 0b00100000
+jump createCrateItem
+createLargePotion:
+set type 0b00100001
+jump createCrateItem
+createLightBall:
+set type 0b00100010
+jump createCrateItem
+createJavelin:
+set type 0b00100011
+jump createCrateItem
+createBomb:
+set type 0b00100100
+createCrateItem:
+fun have generateConsumableItemByIndex
+write itemData mapBank entityDataIndex
+write 0 mapBank entityStatsIndex
+spl wf 1 SubtileData Type
+fun have storeReference
+fun have loadEntityData
+set index 4
+fun have genericFunction
+finishCrateInteraction:
+/
+# well
+set index 4
+fun have genericFunction
+/
+# coin
+spl of floorAlphaProjectile EntityData FloorAlpha
+spl wf t1024 EntityData T1024
+fun have saveEntityData
+read entityData mapBank entityDataIndex
+read entityStats mapBank entityStatsIndex
+spl of floorAlphaCoin EntityData FloorAlpha
+spl wf floorAlphaProjectile EntityData FloorAlpha
+spl wf t1024old EntityData T1024
+
+spl wf 3 SubtileData Type
+
+spl wf floorAlphaProjectile SubtileData Content
+set t1024store t1024
+fun have storeSubtileInTile
+
+spl wf floorAlphaCoin SubtileData Content
+set t1024store t1024old
+fun have storeSubtileInTile
+//
+###
+/
+# enemy
+fun have projectileEnemyCollision
+/
+# other projectile
+spl of projectileDamage1 ProjectileStats Damage
+fun have saveEntityData
+read entityData mapBank entityDataIndex
+read entityStats mapBank entityStatsIndex
+spl of projectileDamage2 ProjectileStats Damage
+
+op sub diff projectileDamage1 projectileDamage2
+op max diffb diff -1
+op min diffb diffb 1
+op add diffb diffb 1
+###
+parr diffb
+set index 4
+fun have genericFunction
+spl of t1024 EntityData T1024 # is messed with by explodeProjectile, need to re-obtain
+fun have loadEntityData
+op abs diff diff
+spl wf diff ProjectileStats Damage
+set entityDataIndex oldEntityDataIndex
+op add entityStatsIndex entityDataIndex 1
+write entityStats mapBank entityStatsIndex
+# move the projectile
+jump frontTileIsFloor
+/
+set index 4
+fun have genericFunction
+fun have loadEntityData
+set index 4
+fun have genericFunction
+/
+op abs diff diff
+spl wf diff ProjectileStats Damage
+write entityStats mapBank entityStatsIndex
+fun have loadEntityData
+set index 4
+fun have genericFunction
+//
+###
+//
+##
+//
+
+skipInstance1:
+set entityDataIndex loopSec
+next
+break1:
+fun close
+
+# enemies
+for entityDataIndex = 256 < 512 2
+set loopSec entityDataIndex
+
+read entityData mapBank entityDataIndex
+jump break2 equal entityData -2
+jump skipInstance2 equal entityData -1
+
+spl of t1024 EntityData T1024
+fun have getTile
+jump skipInstance2 notEqual type 3 # entities only, no items!
+
+spl of entityType EntityData EntityType
+spl of category EntityType Category
+jump skipInstance2 notEqual category 1 # only run through enemies
+
+op add entityStatsIndex entityDataIndex 1
+read entityStats mapBank entityStatsIndex
+
+op mod x t1024 mapSize
+op idiv y t1024 mapSize
+
+spl of shotByPlayer EntityData ShotByPlayer
+jump enemyMove equal shotByPlayer 1
+
+set lowestDistance enemySensorRadius
+set lowestDistancePlayerDataIndex -1
+jump scanLoop
+
+enemyMove: # less conditional after getting hit
+set lowestDistance 69
+set lowestDistancePlayerDataIndex -1
+
+scanLoop:
+for playerDataIndex = minPlayerDataIndex < maxPlayerDataIndex 2
+# op add playerStatsIndex playerDataIndex 1
+read playerData bank1 playerDataIndex
+# read playerStats bank1 playerStatsIndex
+
+spl of enabled PlayerData Enabled
+jump skipPlayerDuringDistanceCheck equal enabled 0
+
+spl of t1024player PlayerData T1024
+op mod playerX t1024player mapSize
+op idiv playerY t1024player mapSize
+op sub diffX x playerX
+op sub diffY y playerY
+op len distance diffX diffY
+jump skipPlayerDuringDistanceCheck greaterThan distance lowestDistance
+jump attackPlayer equal distance 1 # only works with h/v adjacent tiles, good algorithm
+set lowestDistance distance
+set lowestDistancePlayerDataIndex playerDataIndex
+skipPlayerDuringDistanceCheck:
+next
+
+jump skipInstance2 equal lowestDistancePlayerDataIndex -1 # no player found, skip this enemy
+
+op mul diff-X diffX -1
+op rand priorityMixUp 2
+op floor priorityMixUp priorityMixUp
+parr priorityMixUp
+op greaterThan cond1 diffX diffY
+op greaterThan cond2 diff-X diffY
+//
+op greaterThanEq cond1 diffX diffY
+op greaterThanEq cond2 diff-X diffY
+//
+
+op shl testOrderIndex cond2 1
+op add testOrderIndex testOrderIndex cond1
+spl od testOrder TestOrders testOrderIndex
+
+op rand priorityMixUp 2
+op floor priorityMixUp priorityMixUp
+jump noSwap equal priorityMixUp 0
+
+spl of test1 TestOrder 1
+spl of test2 TestOrder 2
+spl wf test2 TestOrder 1
+spl wf test1 TestOrder 2
+
+noSwap:
+for testIndex = 0 < 4 1
+
+spl od direction TestOrder testIndex
+set index 0
+fun have genericFunction
+jump invalidTileDuringMoveComputation equal valid 0
+
+parr type
+enemyMovesToTile:
+spl wf direction EntityData Owner # memory is used as last walked direction for reading in effects so projectile creation becomes a lot easier to trigger
+spl of floorAlphaEnemy EntityData FloorAlpha
+spl wf 0 SubtileData Type
+spl wf floorAlphaEnemy SubtileData Content
+set t1024store t1024old
+fun have storeSubtileInTile
+
+spl wf 3 SubtileData Type
+spl wf loopSec SubtileData Content # i can do this lol
+fun have storeReference
+/
+jump invalidTileDuringMoveComputation
+/
+# comment reason: see getTileByPivotDirection call
+# spl wf 2 SubtileData Type
+# spl wf content SubtileData Content
+set t1024store t1024old
+fun have storeSubtileInTile
+
+spl of floorAlphaEnemy EntityData FloorAlpha
+
+fun have saveEntityData
+set entityDataIndex content
+read entityData mapBank entityDataIndex
+spl wf t1024store EntityData T1024
+spl wf floorAlphaEnemy EntityData FloorAlpha
+write entityData mapBank entityDataIndex
+
+spl of floorAlphaItem EntityData FloorAlpha
+fun have loadEntityData
+spl wf t1024 EntityData T1024
+spl wf floorAlphaItem EntityData FloorAlpha
+write entityData mapBank loopSec # loopSec is just the enemy's data index after all
+/
+spl of entityType EntityData EntityType
+spl of subtype EntityType Subtype
+spl od behavior EnemyBehavior subtype
+jump invalidTileDuringMoveComputation equal behavior 1
+set entityDataIndex content
+op add entityStatsIndex entityDataIndex 1
+fun have saveEntityData # put enemy away for now to use the projectile-enemy collision function
+read entityData mapBank entityDataIndex # get projectile
+read entityStats mapBank entityStatsIndex
+spl of entityType EntityData EntityType
+spl of subtype EntityType Subtype
+jump invalidTileDuringMoveComputation notEqual subtype 2
+set t1024enemy t1024old
+fun have projectileEnemyCollision
+fun have loadEntityData
+jump enemyMovesToTile
+//
+jump skipInstance2
+
+attackPlayer:
+op add playerStatsIndex playerDataIndex 1
+read playerStats bank1 playerStatsIndex
+spl of damage ProjectileStats Damage
+fun have playerTakeDamage
+jump skipInstance2
+
+invalidTileDuringMoveComputation:
+next
+
+skipInstance2:
+set entityDataIndex loopSec
+next
+
+break2:
+# projectiles once more
+fun have simulateProjectileStep
+
+# all entity effects
+for entityDataIndex = 256 < 512 2
+set loopSec entityDataIndex
+
+read entityData mapBank entityDataIndex
+jump break3 equal entityData -2
+jump skipInstance3 equal entityData -1
+
+spl of t1024 EntityData T1024
+op mod subtile t1024 4
+op idiv tile t1024 4
+read tileData mapBank tile
+spl od subtileData TileData subtile
+spl of type SubtileData Type
+jump skipInstance3 notEqual type 3 # entities only, no items!
+
+spl of effect EntityData Effect
+jump skipInstance3 equal effect 0
+spl of effectCooldown EntityData EffectCooldown
+jump skipInstance3 equal effectCooldown 0 # only take effects that dont trigger on death
+
+op add entityStatsIndex entityDataIndex 1
+read entityStats mapBank entityStatsIndex
+
+spl of t1024 EntityData T1024
+fun have getTile
+jump skipInstance3 notEqual type 3
+
+spl of effectProgress EntityData EffectTimer
+spl of targeting EntityData EffectRequiresTargeting
+spl of shotByPlayer EntityData ShotByPlayer
+op add effectProgress effectProgress 1
+op greaterThanEq canTrigger effectProgress effectCooldown
+op sub noTargeting 1 targeting
+op and h targeting shotByPlayer # true if seeking out players with the effect requiring so
+op or canTriggerEffect h noTargeting # if no targeting is required, do it regardless
+jump triggerEffect equal canTriggerEffect 1
+
+spl wf effectProgress EntityData EffectTimer
+write entityData mapBank entityDataIndex
+jump skipInstance3 always
+
+triggerEffect:
+spl wf 0 EntityData EffectTimer
+op sub effect effect 1
+
+parr effect
+spl of direction EntityData Owner
+set entityData 512
+set entityStats 143365
+set index 1
+fun have genericFunction
+/
+spl of direction EntityData Owner
+set entityData 4608
+set entityStats 35
+set index 1
+fun have genericFunction
+/
+set t1024enemy t1024
+spl of health EnemyStats Health
+spl of healthMax EnemyStats HealthMax
+op idiv healthAdd healthMax 10
+op add health health healthAdd
+op min health health healthMax
+spl wf health EnemyStats Health
+
+op mod enemyX t1024 mapSize
+op idiv enemyY t1024 mapSize
+
+for playerDataIndex = minPlayerDataIndex < maxPlayerDataIndex 2
+read playerData bank1 playerDataIndex
+spl of enabled PlayerData Enabled
+jump skipPlayerPush equal enabled 0
+
+spl of t1024player PlayerData T1024
+op mod playerX t1024player mapSize
+op idiv playerY t1024player mapSize
+op sub diffX enemyX playerX
+op sub diffY enemyY playerY
+op len distance diffX diffY
+jump skipPlayerPush greaterThan distance 3.2
+
+op mul diff-X diffX -1
+op rand priorityMixUp 2
+op floor priorityMixUp priorityMixUp
+parr priorityMixUp
+op greaterThan cond1 diffX diffY
+op greaterThan cond2 diff-X diffY
+/
+op greaterThanEq cond1 diffX diffY
+op greaterThanEq cond2 diff-X diffY
+//
+
+op shl testOrderIndex cond2 1
+op add testOrderIndex testOrderIndex cond1
+spl od testOrder TestOrders testOrderIndex
+spl of direction TestOrder 0
+op xor direction direction 0b10 # inverts the direction
+set t1024 t1024player
+set index 0
+fun have genericFunction # check if the tile behind the player is empty
+jump skipPlayerPush equal valid 0
+jump skipPlayerPush notEqual type 0
+
+spl wf t1024 PlayerData T1024
+write playerData bank1 playerDataIndex
+
+skipPlayerPush:
+next
+/
+op mod enemyX t1024 mapSize
+op idiv enemyY t1024 mapSize
+
+for playerDataIndex = minPlayerDataIndex < maxPlayerDataIndex 2
+read playerData bank1 playerDataIndex
+spl of enabled PlayerData Enabled
+jump skipPlayerDamageByEffect equal enabled 0
+
+spl of t1024 PlayerData T1024
+op mod playerX t1024 mapSize
+op idiv playerY t1024 mapSize
+op sub diffX enemyX playerX
+op sub diffY enemyY playerY
+op len distance diffX diffY
+jump skipPlayerDamageByEffect greaterThan distance 3.6
+
+set damage 40
+fun have playerTakeDamage
+
+skipPlayerDamageByEffect:
+next
+
+set storeEntityDataIndex entityDataIndex
+for entityDataIndex = 256 < 506 2
+read entityData mapBank entityDataIndex
+jump breakProjectileDestructionByEffect equal entityData -2
+jump skipProjectileDestructionByEffect equal entityData -1
+op add entityStatsIndex entityDataIndex 1
+read entityStats mapBank entityStatsIndex
+
+spl of t1024 EntityData T1024
+fun have getTile
+jump skipProjectileDestructionByEffect notEqual type 3
+
+spl of entityType EntityData EntityType
+spl of category EntityType Category
+jump skipProjectileDestructionByEffect notEqual category 2
+
+op mod projectileX t1024 mapSize
+op idiv projectileY t1024 mapSize
+op sub diffX projectileX enemyX
+op sub diffY projectileY enemyY
+op len distance diffX diffY
+jump skipProjectileDestructionByEffect greaterThan distance 3.6
+
+# found a valid projectile
+set index 4
+fun have genericFunction
+
+skipProjectileDestructionByEffect:
+next
+breakProjectileDestructionByEffect:
+set entityDataIndex storeEntityDataIndex
+/
+set index 4
+fun have genericFunction
+//
+
+skipInstance3:
+set entityDataIndex loopSec
+next
+
+break3:
+write 0 bank1 58
+jump mainLoop
+
+fun new getTile # t1024
+op mod subtile t1024 4
+op idiv tile t1024 4
+read tileData mapBank tile
+spl od subtileData TileData subtile
+spl of type SubtileData Type
+spl of content SubtileData Content
+fun close
+
+fun new scanTileForPlayers # t1024
+set playerFound 1
+for playerDataIndex = minPlayerDataIndex < maxPlayerDataIndex 2
+read playerData bank1 playerDataIndex
+spl of t1024player PlayerData T1024
+jump skipPlayerOffTile notEqual t1024player t1024
+op add playerStatsIndex playerDataIndex 1
+read playerStats bank1 playerStatsIndex
+jump endScanTile
+skipPlayerOffTile:
+next
+set playerFound 0
+endScanTile:
+fun close
+
+fun new saveItemData
+set saveItemData itemData
+set storeItemStats itemStats
+fun close
+
+fun new loadItemData
+set itemData saveItemData
+set itemStats storeItemStats
+fun close
+
+fun new saveEntityData
+set saveEntityData entityData
+set storeEntityStats entityStats
+fun close
+
+fun new loadEntityData
+set entityData saveEntityData
+set entityStats storeEntityStats
+fun close
+
+fun new storeSubtileInTile # t1024store, subtileData
+op mod subtileStore t1024store 4
+op idiv tileStore t1024store 4
+read tileData mapBank tileStore
+spl wd subtileData TileData subtileStore
+write tileData mapBank tileStore
+fun close
+
+fun new projectileEnemyCollision # t1024enemy, projectile data/stats
+spl of projectileDamage ProjectileStats Damage
+spl of shotByPlayer EntityData ShotByPlayer
+spl of owner EntityData Owner
+set index 4
+fun have genericFunction # fails to do anything if the blastRadius is 0, will still destroy the projectile
+op mod subtile t1024enemy 4
+op idiv tile t1024enemy 4
+read tileData mapBank tile
+spl od subtileData TileData subtile
+spl of entityDataIndex SubtileData Content
+op add entityStatsIndex entityDataIndex 1
+read entityData mapBank entityDataIndex
+read entityStats mapBank entityStatsIndex
+spl of health EnemyStats Health
+op sub health health projectileDamage
+jump killEnemyByProjectile lessThanEq health 0
+
+spl wf health EnemyStats Health
+write entityStats mapBank entityStatsIndex
+spl wf shotByPlayer EntityData ShotByPlayer
+write entityData mapBank entityDataIndex
+jump finishInteraction always
+
+killEnemyByProjectile:
+op sub noPlayer 1 shotByPlayer
+op sub player owner noPlayer # -1 if (0, 0), else owner
+fun have killEnemy
+
+finishInteraction:
+fun close
+
+fun new killEnemy # killer player index (-1 if none), entityData/Stats, probably no t1024 though because i have to type-check everything at all places, lmao
+spl of floorAlpha EntityData FloorAlpha
+spl wf 0 SubtileData Type
+spl wf floorAlpha SubtileData Content
+fun have storeReference
+jump endKillEnemy equal player -1
+
+# more score and exp stuff hhhhh
+op mul playerDataIndex player 2
+op add playerDataIndex playerDataIndex minPlayerDataIndex
+op add playerStatsIndex playerDataIndex 1
+read playerData bank1 playerDataIndex
+read playerStats bank1 playerStatsIndex
+
+spl of enabled PlayerData Enabled
+op sub disabled 1 enabled
+op land shouldNotGrantExperience disabled allowDisabledPlayerExperience
+jump endKillEnemy equal shouldNotGrantExperience 1
+
+set index 3
+fun have genericFunction
+
+endKillEnemy:
+write -1 mapBank entityDataIndex
+write -1 mapBank entityStatsIndex 
+
+spl of effect EntityData Effect
+op sub effect effect 1
+jump skipOnDeath equal effect -1
+spl of effectCooldown EntityData EffectCooldown
+jump skipOnDeath greaterThanEq effectCooldown 1 # check if not ondeath!
+
+spl of t1024effect EntityData T1024
+parr effect
+# blue slime splits into two green slimes
+op mod pivotX t1024effect mapSize
+op idiv pivotY t1024effect mapSize
+for slimeCount = 0 < 2 1
+for attempts = 0 < 86 1
+op rand addX 3
+op floor addX addX 2
+op sub addX addX -1
+op add createX pivotX addX
+op rand addY 3
+op floor addY addY 2
+op sub addY addY -1
+op add createY pivotY addY
+op mul t1024 createY mapSize
+op add t1024 t1024 createX
+op mod subtile t1024 4
+op idiv tile t1024 4
+read tileData mapBank tile
+spl od subtileData TileData subtile
+spl of type SubtileData Type
+spl of floorAlpha SubtileData Content
+jump createSlimeSuccessfully equal type 0
+next
+jump failToCreateSlime
+createSlimeSuccessfully:
+set type 0b00110010
+set index 2
+fun have genericFunction
+set objectData entityData
+set objectStats entityStats
+fun have insertObjectDataIntoMemory
+spl wf 3 SubtileData Type
+spl wf insertIndex SubtileData Content # output from insertObjectData
+fun have storeReference
+next
+failToCreateSlime:
+/
+# gold spirit drops a coin
+op idiv tile t1024effect 4
+op mod subtile t1024effect 4
+read tileData mapBank tile
+spl od subtileData TileData subtile
+spl of content SubtileData Content
+op add content' content 1
+set type 0b00110010
+set entityData 0
+spl wf type EntityData EntityType # this is all that is necessary for coins to work
+write entityData mapBank content
+write 0 mapBank content'
+spl wf 2 SubtileData Type
+spl wf content SubtileData Content
+fun have storeReference
+//
+skipOnDeath:
+fun close
+
+fun new storeReference # shortest function ever
+spl wd subtileData TileData subtile
+write tileData mapBank tile
+fun close
+
+fun new getItemFromSlotIndex
+op mul itemDataIndex itemIndex 2
+op mul itemSetIndex playerIndex 32
+op add itemDataIndex itemDataIndex itemSetIndex
+op add itemDataIndex itemDataIndex minItemDataIndex
+op add itemStatsIndex itemDataIndex 1
+read itemData bank1 itemDataIndex
+read itemStats bank1 itemStatsIndex
+fun close
+
+fun new playerTakeDamage # damage, playerData/Stats
+spl of health PlayerStats PlayerHealth
+op sub health health blastDamage
+op greaterThan keepPlayerEnabled health 0
+spl wf keepPlayerEnabled PlayerData Enabled
+op max health health 0
+spl wf health PlayerStats PlayerHealth
+write playerData bank1 playerDataIndex
+write playerStats bank1 playerStatsIndex
+fun close
+
+fun new generateConsumableItemByIndex # passed parameters: generatedItemIndex, floorAlpha
+# set itemData 0
+
+parr generatedItemIndex # real
+# small potion
+# spl wf 1 ItemData Effect
+# spl wf 30 ItemData EffectStrength # treated as percent
+set itemData 8263584188416
+/
+# large potion
+# spl wf 1 ItemData Effect
+# spl wf 60 ItemData EffectStrength # treated as percent
+set itemData 16509921413120
+/
+# lightBall
+# spl wf 2 ItemData Effect
+# spl wf 2 ItemData EffectStrength
+set itemData 584182695936
+/
+# javelin
+# spl wf 3 ItemData Effect
+# spl wf 0 ItemData EffectStrength
+set itemData 51606767616
+/
+# bomb
+# spl wf 4 ItemData Effect
+# spl wf 0 ItemData EffectStrength
+set itemData 68786653184
+//
+
+spl wf floorAlpha ItemData FloorAlpha
+fun close
+
+fun new genericFunction # index
+# this function exists because i can not store all the server-side game functionalities in a single processor(!)
+write mapIndex funCell 63
+parr index
+# getTileByPivotDirection
+write t1024 funCell 1
+write direction funCell 2
+/
+# fireProjectileFromTile
+write t1024 funCell 1
+write direction funCell 2
+write entityData funCell 3
+write entityStats funCell 4
+/
+# generateEnemyByIndex
+write type funCell 1
+write floorAlpha funCell 2
+write t1024 funCell 3
+/
+# handleEnemyReward
+write playerStats funCell 1
+write playerStatsIndex funCell 2
+write entityStats funCell 3
+/
+# explodeProjectile
+write entityData funCell 1
+write entityStats funCell 2
+//
+op add passedIndex index 1
+write passedIndex funCell 0
+notDone:
+read done funCell 0
+jump notDone greaterThan done 0
+parr index
+# getTileByPivotDirection
+read valid funCell 16
+read t1024 funCell 17
+read t1024old funCell 18
+read subtileData funCell 19
+read type funCell 20
+read content funCell 21
+/
+# fireProjectileFromTile
+# no output wanted
+/
+# generateEnemyByIndex
+read entityData funCell 16
+read entityStats funCell 17
+/
+# handleEnemyReward
+# no output wanted
+/
+# explodeProjectile
+# no output wanted
+//
+fun close
+
+fun new insertObjectDataIntoMemory # object data, object stats, this is uniform code
+for insertIndex = 256 < 506 2
+read test mapBank insertIndex
+jump skipEntryDuringInsertion greaterThan test -1
+write objectData mapBank insertIndex
+op add insertIndex' insertIndex 1
+write objectStats mapBank insertIndex'
+jump endInsertObjectDataIntoMemory
+skipEntryDuringInsertion:
+next
+endInsertObjectDataIntoMemory:
+fun close

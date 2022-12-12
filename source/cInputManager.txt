@@ -1,0 +1,225 @@
+spl new players Players 1 * 4
+
+spl new playerInput PlayerInput 5 * 2 0:Input 1:Data # only used for "use item"
+
+spl new playerStats PlayerStats 12:PlayerHealth 12:PlayerHealthMax 4:ItemCount 16:Score 4:WeaponIndex 4:ArmorIndex
+
+# item data lmao (type, floor alpha, quantity, effect, effectStrength) / effect / effect strength is used in special effects or consumable effects
+spl new itemData ItemData 10:T1024 8:ItemType 8:FloorAlpha 8:Quantity 4:Effect 8:EffectStrength
+# itemCategory, itemSubtype (categories 0: weapon, 1: armor, 2: consumable)
+spl new itemType ItemType 4 * 2 0:Category 1:Subtype
+# the splitter below will not see usage in rendering, remove it later
+# only for gear usage and leveling, gone unused by consumables
+spl new itemStats ItemStats 11 * 4 0:Value 1:ValueMax 2:Exp 3:ExpMax
+spl new itemStats ItemLevel 44:SkippedValues 4:Level 4:LevelMax
+
+spl new itemRegister ItemRegister 1 * 16
+
+set connectUnit @mega
+set connectFlag 8080
+# switches are linked first
+expect switch1 switch2 switch3 switch4 switch5 switch6 switch7 switch8 switch9 cell1 display1
+set localCell cell1
+set renderCount 18
+op add expectSignal renderCount 1
+op add writeSignal renderCount 2
+
+set itemDataIndex 64 # initial value
+
+takeOrder:
+read order localCell 3
+jump takeOrder notEqual order 1337
+
+# ordered to get data from cell, get unit first
+read localX localCell 5
+read localY localCell 6
+getUnit:
+uflag get any connectUnit connectFlag
+sensor x @unit @x
+op add check x 2
+jump getUnit greaterThan localX check
+op sub check x 2
+jump getUnit lessThan localX check
+sensor y @unit @y
+op add check y 2
+jump getUnit greaterThan localY check
+op sub check y 2
+jump getUnit lessThan localY check
+
+# @unit is confirmed to be the right unit
+set i 0
+set signalsPast 0
+read playerIndex localCell 0
+op mul addToItemDataIndex playerIndex 32
+op add itemDataIndex itemDataIndex addToItemDataIndex
+set selectedItemDataIndex itemDataIndex
+set minSelectedItemDataIndex selectedItemDataIndex
+op add maxSelectedItemDataIndex minSelectedItemDataIndex 32
+obtainData:
+read order localCell 3
+read signals localCell 4
+op equal awaitingSet order 1337
+op equal shouldSendSignal signals expectSignal
+op land shouldSendSignal shouldSendSignal awaitingSet
+jump obtainDataSet equal shouldSendSignal 1
+jump handleInputs equal order 69
+jump obtainData always
+obtainDataSet:
+read x localCell 1
+read y localCell 2
+fun have assignBlock
+timer start cancellation 60000
+timer loop cancellation
+read signals localCell 4
+jump sendSignal equal signals expectSignal # last in line
+timer close
+jump takeOrder always
+
+sendSignal:
+write writeSignal localCell 4
+set signalsPast writeSignal
+jump obtainData always
+
+handleInputs:
+read disconnectOrder localCell 3
+jump takeOrder equal disconnectOrder 420
+for i = 0 < 8 1
+getlink b i
+sensor sw b @enabled
+jump skipIteration equal sw 0
+
+op add playerInput i 1
+control enabled b 0
+sensor toggle switch9 @enabled
+jump toggled equal toggle 1
+# regular
+fun have checkUnsend # if the existing input is the same, set playerInput to 0. retain otherwise
+write playerInput playerDataBank playerIndex
+jump skipIteration always
+toggled:
+op add playerInput i 9 # possible inputs + 1
+parr i
+# up
+# drop one item
+spl wf selectedItem PlayerInput Data
+write playerInput playerDataBank playerIndex
+/
+# down
+# drop the item stack
+spl wf selectedItem PlayerInput Data
+write playerInput playerDataBank playerIndex
+/
+# right
+read existingInput playerDataBank playerIndex
+jump skipIteration notEqual existingInput 9 # safeguard to prevent infinite loops at finding the next item by drop / not noticing the changes to item data
+jump skipIteration notEqual existingInput 10 # 9 and 10 are item drop
+read playerStats localCell 17
+spl of itemCount PlayerStats ItemCount # special measures
+fun have registerItems
+op add newSelectedItem selectedItem 1
+jump skipIteration greaterThanEq newSelectedItem itemCount
+set selectedItem newSelectedItem
+keepLookingNeg:
+op add selectedItemSlot selectedItemSlot 1
+op add selectedItemDataIndex selectedItemDataIndex 2
+spl od itemSlot ItemRegister selectedItemSlot
+jump keepLookingNeg equal itemSlot 0
+read itemData playerDataBank selectedItemDataIndex
+spl of itemType ItemData ItemType
+write itemType localCell 14
+write selectedItem localCell 11
+/
+# left
+read existingInput playerDataBank playerIndex
+jump skipIteration notEqual existingInput 9 # safeguard to prevent infinite loops at finding the next item by drop / not noticing the changes to item data
+jump skipIteration notEqual existingInput 10 # 9 and 10 are item drop
+read playerStats localCell 17
+spl of itemCount PlayerStats ItemCount # special measures
+fun have registerItems
+op sub newSelectedItem selectedItem 1
+jump skipIteration lessThan newSelectedItem 0
+set selectedItem newSelectedItem
+keepLookingNeg:
+op sub selectedItemSlot selectedItemSlot 1
+op sub selectedItemDataIndex selectedItemDataIndex 2
+spl od itemSlot ItemRegister selectedItemSlot
+jump keepLookingNeg equal itemSlot 0
+read itemData playerDataBank selectedItemDataIndex
+spl of itemType ItemData ItemType
+write itemType localCell 14
+write selectedItem localCell 11
+/
+# clockwise
+/
+# counter-clockwise
+/
+# action
+spl wf i PlayerInput Input
+spl wf selectedItem PlayerInput Data
+write playerInput playerDataBank playerIndex
+/
+# skip turn
+//
+skipIteration:
+next
+jump handleInputs always
+
+fun new assignBlock
+# in order
+op mul shift i 2
+op add @counter @counter shift
+ucontrol getBlock x y type playerDataBank
+jump completeAssignment always
+ucontrol getBlock x y type mapBank1
+jump completeAssignment always
+ucontrol getBlock x y type mapBank2
+jump completeAssignment always
+ucontrol getBlock x y type mapBank3
+jump completeAssignment always
+ucontrol getBlock x y type mapBank4
+jump completeAssignment always
+ucontrol getBlock x y type mapBank5
+jump completeAssignment always
+ucontrol getBlock x y type mapBank6
+jump completeAssignment always
+ucontrol getBlock x y type mapBank7
+jump completeAssignment always
+ucontrol getBlock x y type mapBank8
+jump completeAssignment always
+ucontrol getBlock x y type mapBank9
+completeAssignment:
+op add i i 1
+fun close
+
+fun new checkUnsend
+read existingInput playerDataBank playerIndex
+jump setZero equal playerInput existingInput
+jump endCheckUnsend always
+setZero:
+set playerInput 0
+endCheckUnsend:
+fun close
+
+fun new registerItems
+set itemRegister 0
+set registerIndex 0
+set registeredItemCount -1 # here -1 represents no items, count from 0
+set registeredItemAmount 0
+for i = minSelectedItemDataIndex < maxSelectedItemDataIndex 2
+read itemData playerDataBank i
+op min itemData itemData 1
+op max itemData itemData 0
+spl wd itemData ItemRegister registerIndex
+jump dontUpdateSelect equal itemData 0
+op add registeredItemCount registeredItemCount 1
+op add registeredItemAmount registeredItemCount 1
+jump updateSelect equal registeredItemAmount itemCount # special case of "this is the last item"
+jump dontUpdateSelect notEqual registeredItemCount selectedItem
+updateSelect:
+set selectedItemDataIndex i
+jump breakRegisterItems
+dontUpdateSelect:
+op add registerIndex registerIndex 1
+next
+breakRegisterItems:
+fun close

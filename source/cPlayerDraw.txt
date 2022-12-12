@@ -1,0 +1,948 @@
+spl new players Players 1 * 4
+# t1024, hairType, bodyType, hairPalette, bodyPalette, direction (angle / 90), lightBallLight, enabled, equippedWeaponIndex, equippedArmorIndex
+spl new playerData PlayerData 10:T1024 2:HairType 2:BodyType 5:HairPaletteR 5:HairPaletteG 5:HairPaletteB 5:BodyPaletteR 5:BodyPaletteG 5:BodyPaletteB 2:Direction 5:LightBallLight 1:Enabled
+# health, healthMax, itemCount, score
+spl new playerStats PlayerStats 12:PlayerHealth 12:PlayerHealthMax 4:ItemCount 16:Score 4:WeaponIndex 4:ArmorIndex
+
+set connectUnit @mega
+set connectFlag 8080
+expect cell1 display1
+set localCell cell1
+set renderCount 18 # count from 0
+set maxPlayerCount 4
+set minPlayerDataIndex 8
+op add renderSignal renderCount 1
+op add expectSignal renderCount 2 # receiving coordinates to blocks
+op add writeSignal renderCount 3
+set mapSize 32
+set tileSize 10
+op idiv halftileSize tileSize 2
+op sub drawCentering 88 halftileSize
+
+takeOrder:
+read order localCell 3
+jump takeOrder notEqual order 1337
+
+# ordered to get data from cell, get unit first
+read localX localCell 5
+read localY localCell 6
+getUnit:
+uflag get any connectUnit connectFlag
+sensor x @unit @x
+op add check x 2
+jump getUnit greaterThan localX check
+op sub check x 2
+jump getUnit lessThan localX check
+sensor y @unit @y
+op add check y 2
+jump getUnit greaterThan localY check
+op sub check y 2
+jump getUnit lessThan localY check
+
+# @unit is confirmed to be the right unit
+set i 0
+set signalsPast 0
+read playerIndex localCell 0
+obtainData:
+read order localCell 3
+read signals localCell 4
+op equal awaitingSet order 1337
+op equal shouldSendSignal signals renderIndex
+op land shouldSendSignal shouldSendSignal awaitingSet
+jump obtainDataSet equal shouldSendSignal 1
+jump initialDraw equal order 69
+jump obtainData always
+obtainDataSet:
+read x localCell 1
+read y localCell 2
+fun have assignBlock
+timer start cancellation 60000
+timer loop cancellation
+read signals localCell 4
+jump sendSignal equal signals expectSignal # last in line
+timer close
+jump takeOrder always
+
+sendSignal:
+write writeSignal localCell 4
+set signalsPast writeSignal
+jump obtainData always
+
+fun new assignBlock
+# in order
+op mul shift i 2
+op add @counter @counter shift
+ucontrol getBlock x y type playerDataBank
+jump completeAssignment always
+ucontrol getBlock x y type mapBank1
+jump completeAssignment always
+ucontrol getBlock x y type mapBank2
+jump completeAssignment always
+ucontrol getBlock x y type mapBank3
+jump completeAssignment always
+ucontrol getBlock x y type mapBank4
+jump completeAssignment always
+ucontrol getBlock x y type mapBank5
+jump completeAssignment always
+ucontrol getBlock x y type mapBank6
+jump completeAssignment always
+ucontrol getBlock x y type mapBank7
+jump completeAssignment always
+ucontrol getBlock x y type mapBank8
+jump completeAssignment always
+ucontrol getBlock x y type mapBank9
+completeAssignment:
+op add i i 1
+fun close
+
+initialDraw:
+fun have drawPlayers
+read turnCount localCell 60
+
+# initialization completed
+
+main:
+read disconnectOrder localCell 3
+jump takeOrder equal disconnectOrder 420
+read serverTurnCount playerDataBank 60
+jump main greaterThanEq turnCount serverTurnCount
+fun have drawPlayers
+waitForRenderers:
+read signal localCell 7
+jump waitForRenderers notEqual signal renderSignal
+df display1
+write 0 localCell 7
+jump main always
+
+fun new drawPlayers
+set turnCount serverTurnCount
+op add playerDataIndex minPlayerDataIndex playerIndex
+read playerData playerDataBank playerDataIndex
+spl of t1024 PlayerData T1024
+op mod povX t1024 mapSize
+op idiv povY t1024 mapSize
+
+for i = 0 < maxPlayerCount 1
+op mul addIndex i 2
+op add playerDataIndex minPlayerDataIndex addIndex
+op add playerStatsIndex playerDataIndex 1
+read playerData playerDataBank playerDataIndex
+read playerStats playerDataBank playerStatsIndex
+
+spl of enabled PlayerData Enabled
+jump skipPlayer equal enabled 0
+
+spl of t1024 PlayerData T1024
+spl of hairType PlayerData HairType
+spl of bodyType PlayerData BodyType
+spl of angle PlayerData Direction
+
+op mod offsetX t1024 mapSize
+op idiv offsetY t1024 mapSize
+op sub offsetX povX offsetX
+op sub offsetY povY offsetY
+op mul drawX offsetX tileSize
+op mul drawY offsetY tileSize
+op add inputX drawX drawCentering
+op add inputY drawY drawCentering
+
+spl of inputR PlayerData BodyPaletteR
+spl of inputG PlayerData BodyPaletteG
+spl of inputB PlayerData BodyPaletteB
+op idiv inputRd inputR 2
+op idiv inputGd inputG 2
+op idiv inputBd inputB 2
+
+op shl bodyDraw bodyType 2
+op add bodyDraw bodyDraw angle
+op mul shift bodyDraw 3
+op add @counter @counter shift
+fun have body0right
+jump finishDrawingBody
+fun have body0up
+jump finishDrawingBody
+fun have body0left
+jump finishDrawingBody
+fun have body0down
+jump finishDrawingBody
+fun have body1right
+jump finishDrawingBody
+fun have body1up
+jump finishDrawingBody
+fun have body1left
+jump finishDrawingBody
+fun have body1down
+jump finishDrawingBody
+fun have body2right
+jump finishDrawingBody
+fun have body2up
+jump finishDrawingBody
+fun have body2left
+jump finishDrawingBody
+fun have body2down
+jump finishDrawingBody
+fun have body1right
+jump finishDrawingBody
+fun have body1up
+jump finishDrawingBody
+fun have body1left
+jump finishDrawingBody
+fun have body1down
+finishDrawingBody:
+
+spl of inputR PlayerData HairPaletteR
+spl of inputG PlayerData HairPaletteG
+spl of inputB PlayerData HairPaletteB
+op idiv inputRd inputR 2
+op idiv inputGd inputG 2
+op idiv inputBd inputB 2
+
+op shl hairDraw hairType 2
+op add hairDraw hairDraw angle
+op mul shift hairDraw 3
+op add @counter @counter shift
+fun have hair0right
+jump finishDrawingHair
+fun have hair0up
+jump finishDrawingHair
+fun have hair0left
+jump finishDrawingHair
+fun have hair0down
+jump finishDrawingHair
+fun have hair1right
+jump finishDrawingHair
+fun have hair1up
+jump finishDrawingHair
+fun have hair1left
+jump finishDrawingHair
+fun have hair1down
+jump finishDrawingHair
+fun have hair2right
+jump finishDrawingHair
+fun have hair2up
+jump finishDrawingHair
+fun have hair2left
+jump finishDrawingHair
+fun have hair2down
+jump finishDrawingHair
+fun have hair3right
+jump finishDrawingHair
+fun have hair3up
+jump finishDrawingHair
+fun have hair3left
+jump finishDrawingHair
+fun have hair3down
+finishDrawingHair:
+
+spl of health PlayerStats PlayerHealth
+spl of healthMax PlayerStats PlayerHealthMax
+op div width health healthMax
+op mul width width tileSize
+draw color 0 0 0 150
+draw rect displayOutputX displayOutputY 10 1
+draw color 0 255 0 200
+draw rect displayOutputX displayOutputY width 1
+skipPlayer:
+next
+fun close
+
+fun new body0right
+draw color inputR inputG inputB 255
+op add elementX inputX 4
+op add elementY inputY 6
+draw rect elementX elementY 2 2
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 3
+draw rect elementX elementY 4 2
+op add elementY inputY 6
+op add elementX2 inputX 5
+op add elementY2 inputY 8
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementY inputY 5
+draw rect elementX elementY 1 1
+fun close
+
+fun new body0up
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementX inputX 6
+draw rect elementX elementY 1 2
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 3
+op add elementY inputY 5
+draw rect elementX elementY 4 3
+op add elementX inputX 4
+op add elementY inputY 4
+draw rect elementX elementY 2 5
+draw color inputR inputG inputB 255
+op add elementX inputX 1
+op add elementY inputY 3
+op add elementX2 inputX 2
+op add elementY2 inputY 4
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 8
+op add elementX2 inputX 7
+draw line elementX elementY elementX2 elementY2
+fun close
+
+fun new body0left
+draw color inputR inputG inputB 255
+op add elementX inputX 4
+op add elementY inputY 6
+draw rect elementX elementY 2 2
+op add elementX inputX 3
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 3
+draw rect elementX elementY 4 2
+op add elementX inputX 6
+op add elementY inputY 6
+op add elementX2 inputX 4
+op add elementY2 inputY 8
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementY inputY 5
+draw rect elementX elementY 1 1
+fun close
+
+fun new body0down
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+op add elementY inputY 0
+draw rect elementX elementY 1 1
+op add elementX inputX 6
+draw rect elementX elementY 1 1
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 1
+draw rect elementX elementY 1 1
+op add elementX inputX 3
+draw rect elementX elementY 1 1
+op add elementY inputY 5
+draw rect elementX elementY 4 3
+op add elementX inputX 4
+op add elementY inputY 4
+draw rect elementX elementY 2 5
+draw color inputR inputG inputB 255
+op add elementY inputY 6
+draw rect elementX elementY 2 2
+op add elementX inputX 1
+op add elementY inputY 3
+op add elementX2 inputX 2
+op add elementY2 inputY 4
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 8
+op add elementX2 inputX 7
+draw line elementX elementY elementX2 elementY2
+fun close
+
+fun new body1right
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 4
+op add elementY inputY 5
+draw rect elementX elementY 2 4
+op add elementX inputX 3
+draw rect elementX elementY 4 3
+op add elementY inputY 3
+draw rect elementX elementY 4 1
+op add elementY inputY 0
+draw rect elementX elementY 1 3
+draw color inputR inputG inputB 255
+op add elementX inputX 4
+op add elementY inputY 6
+draw rect elementX elementY 3 2
+fun close
+
+fun new body1up
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+op add elementX inputX 8
+op add elementY inputY 4
+op add elementX2 inputX 7
+op add elementY2 inputY 5
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 1
+op add elementX2 inputX 2
+draw line elementX elementY elementX2 elementY2
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 4
+op add elementY inputY 5
+draw rect elementX elementY 2 4
+op add elementX inputX 3
+draw rect elementX elementY 4 3
+op add elementY inputY 2
+draw rect elementX elementY 4 2
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementX inputX 6
+draw rect elementX elementY 1 2
+fun close
+
+fun new body1left
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 4
+op add elementY inputY 5
+draw rect elementX elementY 2 4
+op add elementX inputX 3
+draw rect elementX elementY 4 3
+op add elementY inputY 3
+draw rect elementX elementY 4 1
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 1 3
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 6
+draw rect elementX elementY 3 2
+fun close
+
+fun new body1down
+draw color inputR inputG inputB 255
+op add elementX inputX 8
+op add elementY inputY 3
+op add elementX2 inputX 7
+op add elementY2 inputY 4
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 1
+op add elementX2 inputX 2
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+op add elementY inputY 1
+draw rect elementX elementY 1 1
+op add elementX inputX 6
+draw rect elementX elementY 1 1
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 0
+draw rect elementX elementY 1 1
+op add elementX inputX 3
+draw rect elementX elementY 1 1
+op add elementY inputY 3
+draw rect elementX elementY 4 1
+op add elementY inputY 5
+draw rect elementX elementY 4 3
+op add elementX inputX 4
+draw rect elementX elementY 2 4
+draw color inputR inputG inputB 255
+op add elementY inputY 6
+draw rect elementX elementY 2 2
+fun close
+
+fun new body2right
+draw color inputR inputG inputB 255
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 5
+draw rect elementX elementY 4 4
+op add elementX inputX 2
+op add elementY inputY 1
+draw rect elementX elementY 1 5
+op add elementX inputX 4
+op add elementY inputY 4
+draw rect elementX elementY 2 5
+op add elementX inputX 3
+op add elementY inputY 0
+draw rect elementX elementY 1 5
+draw color inputR inputG inputB 255
+op add elementX inputX 5
+op add elementY inputY 6
+draw rect elementX elementY 2 2
+fun close
+
+fun new body2up
+draw color inputR inputG inputB 255
+op add elementX inputX 1
+op add elementY inputY 4
+op add elementX2 inputX 2
+op add elementY2 inputY 5
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 8
+op add elementX2 inputX 7
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 5
+draw rect elementX elementY 4 4
+op add elementY inputY 2
+draw rect elementX elementY 1 2
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementX inputX 6
+draw rect elementX elementY 1 2
+op add elementY inputY 2
+draw rect elementX elementY 1 2
+op add elementX inputX 4
+op add elementY inputY 1
+draw rect elementX elementY 2 2
+op add elementY inputY 4
+draw rect elementX elementY 2 5
+fun close
+
+fun new body2left
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 5
+draw rect elementX elementY 4 4
+op add elementX inputX 7
+op add elementY inputY 1
+draw rect elementX elementY 1 5
+op add elementX inputX 4
+op add elementY inputY 4
+draw rect elementX elementY 2 5
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 1 5
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 6
+draw rect elementX elementY 2 2
+fun close
+
+fun new body2down
+draw color inputR inputG inputB 255
+op add elementX inputX 1
+op add elementY inputY 4
+op add elementX2 inputX 2
+op add elementY2 inputY 5
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 8
+op add elementX2 inputX 7
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 3
+op add elementY inputY 2
+draw rect elementX elementY 4 4
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 6
+draw rect elementX elementY 4 3
+op add elementY inputY 3
+draw rect elementX elementY 1 1
+op add elementY inputY 0
+draw rect elementX elementY 1 2
+op add elementX inputX 6
+draw rect elementX elementY 1 2
+op add elementY inputY 3
+draw rect elementX elementY 1 1
+op add elementX inputX 4
+op add elementY inputY 2
+draw rect elementX elementY 2 1
+op add elementY inputY 5
+draw rect elementX elementY 2 4
+draw color inputR inputG inputB 255
+op add elementY inputY 6
+draw rect elementX elementY 2 2
+fun close
+
+fun new hair0right
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 3
+op add elementY inputY 6
+draw rect elementX elementY 2 1
+op add elementY inputY 8
+draw rect elementX elementY 3 2
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 3 2
+draw color inputR inputG inputB 255
+op add elementX inputX 4
+op add elementY inputY 9
+draw rect elementX elementY 3 1
+op add elementX inputX 6
+op add elementY inputY 8
+draw rect elementX elementY 2 1
+op add elementX inputX 3
+draw rect elementX elementY 1 1
+fun close
+
+fun new hair0up
+draw color inputR inputG inputB 255
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 1 2
+op add elementX inputX 7
+draw rect elementX elementY 1 2
+op add elementX inputX 3
+op add elementY inputY 8
+draw rect elementX elementY 4 2
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 6
+draw rect elementX elementY 4 3
+op add elementX inputX 4
+op add elementY inputY 5
+draw rect elementX elementY 2 1
+fun close
+
+fun new hair0left
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 2 1
+op add elementX inputX 5
+op add elementY inputY 8
+draw rect elementX elementY 3 2
+op add elementX inputX 6
+op add elementY inputY 7
+draw rect elementX elementY 3 2
+draw color inputR inputG inputB 255
+op add elementX inputX 4
+op add elementY inputY 9
+draw rect elementX elementY 3 1
+op add elementX inputX 3
+op add elementY inputY 8
+draw rect elementX elementY 2 1
+op add elementX inputX 7
+draw rect elementX elementY 1 1
+fun close
+
+fun new hair0down
+draw color inputR inputG inputB 255
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 1 2
+op add elementX inputX 7
+draw rect elementX elementY 1 2
+op add elementX inputX 3
+op add elementY inputY 8
+draw rect elementX elementY 4 2
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 6
+draw rect elementX elementY 1 3
+op add elementX inputX 6
+draw rect elementX elementY 1 3
+fun close
+
+fun new hair1right
+draw color inputR inputG inputB 255
+op add elementX inputX 2
+op add elementY inputY 6
+draw rect elementX elementY 2 3
+op add elementY inputY 5
+draw rect elementX elementY 1 1
+op add elementX inputX 4
+op add elementY inputY 7
+draw rect elementX elementY 1 1
+op add elementX inputX 7
+op add elementY inputY 8
+draw rect elementX elementY 1 1
+op add elementX inputX 3
+draw rect elementX elementY 4 2
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 5
+draw rect elementX elementY 2 1
+op add elementX inputX 7
+op add elementY inputY 7
+draw rect elementX elementY 1 1
+op add elementX inputX 2
+op add elementY inputY 4
+draw rect elementX elementY 1 1
+op add elementX inputX 1
+op add elementY inputY 6
+draw rect elementX elementY 1 2
+fun close
+
+fun new hair1up
+draw color inputR inputG inputB 255
+op add elementX inputX 2
+op add elementY inputY 5
+draw rect elementX elementY 6 4
+op add elementY inputY 4
+draw rect elementX elementY 2 1
+op add elementX inputX 6
+draw rect elementX elementY 2 1
+op add elementX inputX 3
+op add elementY inputY 9
+draw rect elementX elementY 4 1
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 7
+draw rect elementX elementY 4 1
+op add elementX inputX 4
+op add elementY inputY 6
+draw rect elementX elementY 2 3
+draw color inputR inputG inputB 255
+op add elementY inputY 7
+draw rect elementX elementY 2 1
+fun close
+
+fun new hair1left
+draw color inputR inputG inputB 255
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 2 3
+op add elementX inputX 7
+op add elementY inputY 5
+draw rect elementX elementY 1 1
+op add elementX inputX 5
+op add elementY inputY 7
+draw rect elementX elementY 1 1
+op add elementX inputX 2
+op add elementY inputY 8
+draw rect elementX elementY 1 1
+op add elementX inputX 3
+draw rect elementX elementY 4 2
+draw color inputRd inputGd inputBd 255
+draw rect elementX elementY 2 1
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 1 1
+op add elementX inputX 7
+op add elementY inputY 4
+draw rect elementX elementY 1 1
+op add elementX inputX 8
+op add elementY inputY 6
+draw rect elementX elementY 1 2
+fun close
+
+fun new hair1down
+draw color inputR inputG inputB 255
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 2 2
+op add elementX inputX 6
+draw rect elementX elementY 2 2
+op add elementX inputX 3
+op add elementY inputY 8
+draw rect elementX elementY 4 2
+op add elementX inputX 2
+op add elementY inputY 6
+draw rect elementX elementY 1 1
+op add elementX inputX 7
+draw rect elementX elementY 1 1
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 4
+draw rect elementX elementY 1 1
+op add elementX inputX 2
+draw rect elementX elementY 1 1
+op add elementX inputX 3
+op add elementY inputY 7
+op add elementX2 inputX 4
+op add elementY2 inputY 8
+draw stroke 1
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 6
+op add elementX2 inputX 5
+draw line elementX elementY elementX2 elementY2
+fun close
+
+fun new hair2right
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 3
+op add elementY inputY 6
+draw rect elementX elementY 1 2
+op add elementX inputX 6
+op add elementY inputY 7
+draw rect elementX elementY 1 2
+draw color inputR inputG inputB 255
+op add elementX inputX 2
+draw rect elementX elementY 1 2
+op add elementX inputX 3
+op add elementY inputY 8
+draw rect elementX elementY 3 2
+fun close
+
+fun new hair2up
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 3
+op add elementY inputY 9
+draw rect elementX elementY 4 1
+op add elementX inputX 2
+op add elementY inputY 8
+draw rect elementX elementY 6 1
+draw color inputR inputG inputB 255
+op add elementY inputY 6
+draw rect elementX elementY 6 2
+op add elementX inputX 3
+op add elementY inputY 5
+draw rect elementX elementY 4 4
+fun close
+
+fun new hair2left
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 1 2
+op add elementX inputX 3
+op add elementY inputY 7
+draw rect elementX elementY 1 2
+draw color inputR inputG inputB 255
+op add elementX inputX 7
+draw rect elementX elementY 1 2
+op add elementX inputX 4
+op add elementY inputY 8
+draw rect elementX elementY 3 2
+fun close
+
+fun new hair2down
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 9
+draw rect elementX elementY 4 1
+op add elementX inputX 2
+op add elementY inputY 8
+draw rect elementX elementY 6 1
+draw color inputRd inputGd inputBd 255
+op add elementY inputY 7
+draw rect elementX elementY 2 1
+op add elementX inputX 6
+draw rect elementX elementY 2 1
+op add elementY inputY 6
+draw rect elementX elementY 1 1
+op add elementX inputX 3
+draw rect elementX elementY 1 1
+op add elementX inputX 4
+op add elementY inputY 8
+draw rect elementX elementY 2 1
+fun close
+
+fun new hair3right
+draw color inputR inputG inputB 255
+op add elementX inputX 5
+op add elementY inputY 5
+draw rect elementX elementY 3 1
+op add elementX inputX 3
+op add elementY inputY 8
+draw rect elementX elementY 3 2
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 2 2
+op add elementX inputX 3
+op add elementY inputY 4
+draw rect elementX elementY 1 2
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 6
+draw rect elementX elementY 2 1
+op add elementY inputY 8
+draw rect elementX elementY 1 1
+op add elementX inputX 2
+op add elementY inputY 6
+draw rect elementX elementY 1 2
+fun close
+
+fun new hair3up
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 6
+draw rect elementX elementY 4 4
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 2 2
+op add elementX inputX 6
+draw rect elementX elementY 2 2
+op add elementX inputX 2
+op add elementY inputY 5
+draw rect elementX elementY 1 1
+op add elementX inputX 7
+draw rect elementX elementY 1 1
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 4
+op add elementY inputY 7
+draw rect elementX elementY 2 1
+op add elementX inputX 2
+op add elementY inputY 6
+draw rect elementX elementY 1 1
+op add elementX inputX 7
+draw rect elementX elementY 1 1
+fun close
+
+fun new hair3left
+draw color inputR inputG inputB 255
+op add elementX inputX 2
+op add elementY inputY 5
+draw rect elementX elementY 3 1
+op add elementX inputX 4
+op add elementY inputY 8
+draw rect elementX elementY 3 2
+op add elementX inputX 6
+op add elementY inputY 7
+draw rect elementX elementY 2 2
+op add elementY inputY 4
+draw rect elementX elementY 1 2
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 2
+draw rect elementX elementY 2 1
+op add elementX inputX 3
+op add elementY inputY 8
+draw rect elementX elementY 1 1
+op add elementX inputX 7
+op add elementY inputY 6
+draw rect elementX elementY 1 2
+fun close
+
+fun new hair3down
+draw color inputR inputG inputB 255
+op add elementX inputX 3
+op add elementY inputY 9
+draw rect elementX elementY 4 1
+op add elementX inputX 2
+op add elementY inputY 8
+draw rect elementX elementY 6 1
+op add elementY inputY 6
+draw rect elementX elementY 1 1
+op add elementX inputX 7
+draw rect elementX elementY 1 1
+op add elementX inputX 4
+op add elementY inputY 5
+draw rect elementX elementY 2 1
+draw color inputRd inputGd inputBd 255
+op add elementX inputX 2
+op add elementY inputY 7
+draw rect elementX elementY 2 1
+op add elementX inputX 6
+draw rect elementX elementY 2 1
+op add elementX inputX 4
+op add elementY inputY 8
+draw rect elementX elementY 2 1
+op add elementY inputY 4
+draw rect elementX elementY 2 1
+fun close

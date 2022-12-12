@@ -1,0 +1,1018 @@
+spl new playerInputs PlayerInputs 5 * 4
+
+# item data lmao (type, floor alpha, quantity, effect, effectStrength) / effect / effect strength is used in special effects or consumable effects
+spl new itemData ItemData 10:T1024 8:ItemType 8:FloorAlpha 8:Quantity 4:Effect 8:EffectStrength
+# itemCategory, itemSubtype (categories 0: weapon, 1: armor, 2: consumable)
+spl new itemType ItemType 4 * 2 0:Category 1:Subtype
+# the splitter below will not see usage in rendering, remove it later
+# only for gear usage and leveling, gone unused by consumables
+spl new itemStats ItemStats 11 * 4 0:Value 1:ValueMax 2:Exp 3:ExpMax
+spl new itemStats ItemLevel 44:SkippedValues 4:Level 4:LevelMax
+
+# t1024, hairType, bodyType, hairPalette, bodyPalette, direction (angle / 90), lightBallLight, enabled, equippedWeaponIndex, equippedArmorIndex
+spl new playerData PlayerData 10:T1024 2:HairType 2:BodyType 15:HairPalette 15:BodyPalette 2:Direction 5:LightBallLighting 1:Enabled
+spl new playerStats PlayerStats 12:PlayerHealth 12:PlayerHealthMax 4:ItemCount 16:Score 4:WeaponIndex 4:ArmorIndex
+
+# switch1 is here because i want to draw the item change arrows only when it is enabled
+set localCell cell1
+
+# logic proc or better for smoothness
+
+mainLoop:
+draw clear 0 0 0
+draw color 255 255 255 255
+read playerCount localCell 8
+
+set inputY 62
+for i = 0 < playerCount 1
+set inputX 2
+fun have p
+op add inputX inputX 14
+op mul shiftCounter i 3
+op add @counter @counter shiftCounter
+fun have zero
+jump finishDrawingPlayerIndexRep
+fun have one
+jump finishDrawingPlayerIndexRep
+fun have two
+jump finishDrawingPlayerIndexRep
+fun have three
+finishDrawingPlayerIndexRep:
+op add inputX inputX 14
+fun have colon
+op add inputX inputX 18
+read playerInputs localCell 8
+spl od playerInput PlayerInputs i
+parr playerInput
+# default no input
+fun have question
+/
+fun have arrowUp
+/
+fun have arrowDown
+/
+fun have arrowRight
+/
+fun have arrowLeft
+/
+fun have turnClockwise
+/
+fun have turnCounterclockwise
+/
+fun have exclamation
+/
+fun have clock
+/
+fun have dropStackIcon
+/
+fun have dropItemIcon
+/
+/
+/
+/
+/
+fun have bag
+/
+//
+op sub inputY inputY 20
+
+next
+df display1
+
+# stats, selected item, all that good stuff
+draw clear 0 0 0
+set inputY 30 # goes for both having no arrows and having arrows
+sensor drawArrows switch1 @enabled
+jump skipDrawingArrows equal drawArrows 0
+
+set inputX 2
+fun have itemsArrowLeft
+set inputX 70
+fun have itemsArrowRight
+
+op sub addInputY 2 addInputY
+op add inputY inputY addInputY # shifts thing up and down by 2 pixels
+
+skipDrawingArrows:
+set inputX 16
+read itemData localCell 14
+jump skipDrawingItemIcon equal itemData -1
+read itemStats localCell 15
+spl of itemType ItemData ItemType
+spl of itemCategory ItemType 0
+spl of itemSubtype ItemType 1
+parr itemCategory
+
+fun have defineGenericGearColor
+jump drawRangedWeapon greaterThanEq itemSubtype 8
+fun have meleeWeapon
+jump finishDrawingWeapon always
+drawRangedWeapon:
+fun have rangedWeapon
+finishDrawingWeapon:
+jump damage always
+ 
+/
+
+fun have defineGenericGearColor
+fun have armor
+jump health always
+
+/
+
+op mul shiftCounter itemSubtype 2
+op add @counter @counter shiftCounter
+fun have smallPotion
+jump quantity always
+fun have largePotion
+jump quantity always
+fun have javelin
+jump quantity always
+fun have bomb
+jump quantity always
+fun have lightBall
+
+//
+quantity:
+set inputY 14
+draw color 255 255 255 255
+spl of number ItemData Quantity
+op log10 digits number
+op add digits digits 1
+op mul shift digits -5
+op add inputX 40 shift
+fun have drawNumber
+jump resume always
+damage:
+set inputY 14
+draw color 255 155 155 255
+spl of number ItemStats Value
+op log10 digits number
+op add digits digits 1
+op mul shift digits -10
+op add inputX 34 shift
+fun have drawNumber
+spl of number ItemStats ValueMax
+op log10 digits number
+op mul shift digits 10
+op add inputX 46 shift
+op add digits digits 1
+fun have drawNumber
+draw color 255 255 255 255
+set inputX 35
+fun have colon
+jump resume always
+health:
+set inputY 14
+draw color 155 255 185 255
+spl of number ItemStats Value
+op log10 digits number
+op add digits digits 1
+op mul shift digits -5
+op add inputX 40 shift
+fun have drawNumber
+
+skipDrawingItemIcon:
+resume:
+# here come the statistics
+read playerData localCell 16
+read playerStats localCell 17
+
+spl of playerHealth PlayerStats PlayerHealth
+spl of playerHealthMax PlayerStats PlayerHealthMax
+spl of score PlayerStats Score
+read itemStats localCell 19 # weapon
+spl of damage ItemStats Value
+spl of weaponExp ItemStats Exp
+spl of weaponExpMax ItemStats ExpMax
+read itemStats localCell 21 # armor
+spl of armorExp ItemStats Exp
+spl of armorExpMax ItemStats ExpMax
+draw color 255 255 255 255
+draw lineRect 0 0 14 40 1
+draw lineRect 40 0 14 40 1
+draw color 40 140 240 255
+op div width weaponExp weaponExpMax
+op mul width width 38
+draw rect 1 1 12 width
+op div width armorExp armorExpMax
+op mul width width 38
+draw rect 41 1 12 width
+
+set inputX 0
+set inputY 0
+op mod whatToDraw @time 9000
+op idiv whatToDraw whatToDraw 3000
+parr whatToDraw
+draw color 255 155 155 255
+set number damage
+op log10 digits number
+op add digits digits 1
+fun have drawNumber
+/
+draw color 155 255 185 255
+set number playerHealth
+op log10 digits number
+op add digits digits 1
+fun have drawNumber
+draw color 255 255 255 255
+fun have slash
+op add inputX inputX 14
+draw color 155 255 185 255
+set number playerHealthMax
+op log10 digits number
+op add digits digits 1
+fun have drawNumber
+/
+draw color 210 230 140 255
+set number score
+op log10 digits number
+op add digits digits 1
+fun have drawNumber
+//
+
+finalFlush:
+df display2
+jump mainLoop always
+
+fun new defineGenericGearColor
+op mul shiftCounter itemSubtype 2
+op add @counter @counter shiftCounter
+packcolor color 0.4 0.325 0.15 1 # "old"
+jump finishDefiningColor always
+packcolor color 0.575 0.575 0.05 1 # "shining"
+jump finishDefiningColor always
+packcolor color 0.1 0.775 0.775 1 # "magic"
+jump finishDefiningColor always
+packcolor color 0.8 0.8 0.85 1 # "dwarven"
+jump finishDefiningColor always
+packcolor color 0.5 0.8 0.6 1 # "mythic"
+finishDefiningColor:
+fun close
+
+fun new arrowRight
+draw color 0x09 0xd9 0xe3 255
+op add elementX inputX 0
+op add elementY inputY 4
+draw rect elementX elementY 14 8
+op add elementX inputX 8
+op add elementY inputY 0
+draw rect elementX elementY 2 16
+op add elementX inputX 10
+op add elementY inputY 2
+draw rect elementX elementY 2 12
+op add elementX inputX 14
+op add elementY inputY 6
+draw rect elementX elementY 2 4
+fun close
+
+fun new arrowLeft
+draw color 0x09 0xd9 0xe3 255
+op add elementX inputX 2
+op add elementY inputY 4
+draw rect elementX elementY 14 8
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 2 16
+op add elementX inputX 4
+op add elementY inputY 2
+draw rect elementX elementY 2 12
+op add elementX inputX 0
+op add elementY inputY 6
+draw rect elementX elementY 2 4
+fun close
+
+fun new arrowUp
+draw color 0x09 0xd9 0xe3 255
+op add elementX inputX 4
+op add elementY inputY 0
+draw rect elementX elementY 8 14
+op add elementX inputX 0
+op add elementY inputY 8
+draw rect elementX elementY 16 2
+op add elementX inputX 2
+op add elementY inputY 10
+draw rect elementX elementY 12 2
+op add elementX inputX 6
+op add elementY inputY 14
+draw rect elementX elementY 4 2
+fun close
+
+fun new arrowDown
+draw color 0x09 0xd9 0xe3 255
+op add elementX inputX 4
+op add elementY inputY 2
+draw rect elementX elementY 8 14
+op add elementX inputX 0
+op add elementY inputY 6
+draw rect elementX elementY 16 2
+op add elementX inputX 2
+op add elementY inputY 4
+draw rect elementX elementY 12 2
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 4 2
+fun close
+
+fun new question
+draw color 0xff 0xff 0xff 255
+op add elementX inputX 2
+op add elementY inputY 12
+draw rect elementX elementY 2 2
+op add elementX inputX 4
+op add elementY inputY 14
+draw rect elementX elementY 8 2
+op add elementX inputX 12
+op add elementY inputY 10
+draw rect elementX elementY 2 4
+op add elementX inputX 8
+op add elementY inputY 8
+draw rect elementX elementY 4 2
+op add elementX inputX 6
+op add elementY inputY 4
+draw rect elementX elementY 2 4
+op add elementY inputY 0
+draw rect elementX elementY 2 2
+fun close
+
+fun new exclamation
+draw color 0xff 0xff 0x80 255
+op add elementX inputX 4
+op add elementY inputY 10
+draw rect elementX elementY 8 4
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 4 10
+op add elementY inputY 0
+draw rect elementX elementY 4 4
+fun close
+
+fun new bag
+draw color 0x56 0x3a 0x29 255
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 16 6
+op add elementX inputX 2
+op add elementY inputY 0
+draw rect elementX elementY 12 12
+op add elementX inputX 4
+op add elementY inputY 12
+draw rect elementX elementY 8 4
+op add elementX inputX 2
+op add elementY inputY 10
+draw rect elementX elementY 4 4
+op add elementX inputX 10
+draw rect elementX elementY 4 4
+draw color 0x3d 0x28 0x1d 255
+op add elementX inputX 2
+op add elementY inputY 6
+draw rect elementX elementY 12 2
+op add elementX inputX 4
+op add elementY inputY 4
+draw rect elementX elementY 8 2
+op add elementX inputX 14
+op add elementY inputY 2
+draw rect elementX elementY 2 2
+op add elementX inputX 0
+draw rect elementX elementY 2 2
+op add elementX inputX 2
+op add elementY inputY 0
+draw rect elementX elementY 12 2
+draw color 0xcc 0x8f 0x13 255
+op add elementX inputX 4
+op add elementY inputY 6
+draw rect elementX elementY 8 2
+op add elementX inputX 2
+op add elementY inputY 8
+draw rect elementX elementY 2 2
+op add elementX inputX 12
+draw rect elementX elementY 2 2
+draw color 0x13 0x11 0x0f 255
+op add elementX inputX 4
+op add elementY inputY 10
+draw rect elementX elementY 8 4
+fun close
+
+fun new clock
+draw color 0xcb 0xb3 0x07 255
+op add elementX inputX 10
+op add elementY inputY 14
+draw rect elementX elementY 2 2
+op add elementX inputX 4
+draw rect elementX elementY 2 2
+op add elementX inputX 2
+op add elementY inputY 12
+draw rect elementX elementY 12 2
+draw color 0x00 0x00 0x00 255
+op add elementY inputY 4
+draw rect elementX elementY 12 8
+op add elementX inputX 4
+op add elementY inputY 2
+draw rect elementX elementY 8 12
+draw color 0xff 0xff 0xff 255
+op add elementY inputY 4
+draw rect elementX elementY 8 8
+draw color 0x35 0x35 0x35 255
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 2 6
+draw rect elementX elementY 4 2
+fun close
+
+fun new turnClockwise
+draw color 0x80 0xff 0x80 255
+op add elementX inputX 2
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+op add elementX inputX 8
+op add elementY inputY 10
+draw rect elementX elementY 2 2
+op add elementX inputX 10
+op add elementY inputY 4
+draw rect elementX elementY 2 6
+draw color 0x00 0xff 0x80 255
+op add elementX inputX 8
+draw rect elementX elementY 6 2
+op add elementX inputX 10
+op add elementY inputY 2
+draw rect elementX elementY 2 2
+fun close
+
+fun new turnCounterclockwise
+draw color 0x80 0xff 0x80 255
+op add elementX inputX 8
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+op add elementX inputX 6
+op add elementY inputY 10
+draw rect elementX elementY 2 2
+op add elementX inputX 4
+op add elementY inputY 4
+draw rect elementX elementY 2 6
+draw color 0x00 0xff 0x80 255
+op add elementX inputX 2
+draw rect elementX elementY 6 2
+op add elementX inputX 4
+op add elementY inputY 2
+draw rect elementX elementY 2 2
+fun close
+
+fun new zero
+op add elementX inputX 2
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 2 10
+op add elementX inputX 2
+op add elementY inputY 0
+draw rect elementX elementY 6 2
+op add elementX inputX 8
+op add elementY inputY 2
+draw rect elementX elementY 2 10
+fun close
+
+fun new one
+op add elementX inputX 0
+op add elementY inputY 8
+op add elementX2 inputX 4
+op add elementY2 inputY 12
+draw stroke 2
+draw line elementX elementY elementX2 elementY2
+op add elementX inputX 4
+op add elementY inputY 0
+draw rect elementX elementY 2 12
+op add elementX inputX 0
+draw rect elementX elementY 10 2
+fun close
+
+fun new two
+op add elementX inputX 0
+op add elementY inputY 10
+draw rect elementX elementY 2 2
+op add elementX inputX 8
+draw rect elementX elementY 2 2
+op add elementX inputX 2
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+op add elementX inputX 0
+op add elementY inputY 0
+draw rect elementX elementY 10 2
+op add elementX2 inputX 8
+op add elementY2 inputY 8
+draw stroke 2
+draw line elementX elementY elementX2 elementY2
+fun close
+
+fun new three
+op add elementX inputX 8
+op add elementY inputY 2
+draw rect elementX elementY 2 4
+op add elementY inputY 8
+draw rect elementX elementY 2 4
+op add elementX inputX 2
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+op add elementY inputY 0
+draw rect elementX elementY 6 2
+op add elementX inputX 4
+op add elementY inputY 6
+draw rect elementX elementY 4 2
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 2 2
+op add elementY inputY 10
+draw rect elementX elementY 2 2
+fun close
+
+fun new four
+op add elementX inputX 0
+op add elementY inputY 6
+draw rect elementX elementY 10 2
+op add elementX inputX 6
+op add elementY inputY 0
+draw rect elementX elementY 2 14
+op add elementX inputX 0
+op add elementY inputY 8
+op add elementX2 inputX 6
+op add elementY2 inputY 14
+draw stroke 2
+draw line elementX elementY elementX2 elementY2
+fun close
+
+fun new five
+op add elementX inputX 0
+op add elementY inputY 6
+draw rect elementX elementY 8 2
+op add elementX inputX 8
+op add elementY inputY 2
+draw rect elementX elementY 2 4
+op add elementX inputX 2
+op add elementY inputY 0
+draw rect elementX elementY 6 2
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 2 2
+op add elementY inputY 8
+draw rect elementX elementY 2 6
+op add elementY inputY 12
+draw rect elementX elementY 10 2
+fun close
+
+fun new roundStructure
+op add elementX inputX 2
+op add elementY inputY 0
+draw rect elementX elementY 6 2
+op add elementY inputY 6
+draw rect elementX elementY 6 2
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+fun close
+
+fun new six
+fun have roundStructure
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 2 10
+op add elementX inputX 8
+draw rect elementX elementY 2 4
+op add elementY inputY 10
+draw rect elementX elementY 2 2
+fun close
+
+fun new seven
+op add elementX inputX 0
+op add elementY inputY 12
+draw rect elementX elementY 10 2
+op add elementY inputY 0
+op add elementX2 inputX 8
+op add elementY2 inputY 10
+draw stroke 2
+draw line elementX elementY elementX2 elementY2
+fun close
+
+fun new eight
+fun have roundStructure
+op add elementX inputX 0
+op add elementY inputY 8
+draw rect elementX elementY 2 4
+op add elementX inputX 8
+draw rect elementX elementY 2 4
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 2 4
+op add elementX inputX 8
+draw rect elementX elementY 2 4
+fun close
+
+fun new nine
+fun have roundStructure
+op add elementX inputX 8
+op add elementY inputY 2
+draw rect elementX elementY 2 10
+op add elementX inputX 0
+op add elementY inputY 8
+draw rect elementX elementY 2 4
+op add elementY inputY 2
+draw rect elementX elementY 2 2
+fun close
+
+fun new slash
+op add elementX inputX 4
+op add elementY inputY 0
+draw rect elementX elementY 2 4
+op add elementX inputX 6
+op add elementY inputY 4
+draw rect elementX elementY 2 4
+op add elementX inputX 8
+op add elementY inputY 8
+draw rect elementX elementY 2 4
+op add elementX inputX 10
+op add elementY inputY 12
+draw rect elementX elementY 2 4
+fun close
+
+fun new colon
+op add elementX inputX 2
+op add elementY inputY 6
+draw rect elementX elementY 4 4
+op add elementY inputY 0
+draw rect elementX elementY 4 4
+fun close
+
+fun new p
+op add elementX inputX 0
+op add elementY inputY 0
+draw rect elementX elementY 2 14
+op add elementX inputX 2
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+op add elementY inputY 6
+draw rect elementX elementY 6 2
+op add elementX inputX 8
+op add elementY inputY 8
+draw rect elementX elementY 2 4
+fun close
+
+fun new meleeWeapon
+draw col color
+op add elementX inputX 6
+op add elementY inputY 24
+draw rect elementX elementY 6 6
+op add elementX inputX 24
+op add elementY inputY 6
+draw rect elementX elementY 6 6
+op add elementX inputX 12
+op add elementY inputY 12
+draw rect elementX elementY 12 12
+op add elementX inputX 18
+op add elementY inputY 18
+draw rect elementX elementY 12 12
+op add elementX inputX 24
+op add elementY inputY 24
+draw rect elementX elementY 12 12
+op add elementX inputX 30
+op add elementY inputY 30
+draw rect elementX elementY 12 12
+op add elementX inputX 36
+op add elementY inputY 36
+draw rect elementX elementY 12 12
+draw color 0xff 0xff 0xff 255
+op add elementX inputX 18
+op add elementY inputY 18
+draw rect elementX elementY 6 6
+op add elementX inputX 24
+op add elementY inputY 24
+draw rect elementX elementY 6 6
+op add elementX inputX 30
+op add elementY inputY 30
+draw rect elementX elementY 6 6
+op add elementX inputX 36
+op add elementY inputY 36
+draw rect elementX elementY 6 6
+draw color 0x2f 0x23 0x11 255
+op add elementX inputX 0
+op add elementY inputY 0
+draw rect elementX elementY 12 12
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 12 12
+draw color 0x47 0x36 0x23 255
+draw rect elementX elementY 6 6
+op add elementX inputX 12
+op add elementY inputY 12
+draw rect elementX elementY 6 6
+fun close
+
+fun new rangedWeapon
+draw color 0x2f 0x23 0x11 255
+op add elementX inputX 0
+op add elementY inputY 0
+draw rect elementX elementY 18 18
+op add elementX inputX 12
+op add elementY inputY 12
+draw rect elementX elementY 12 12
+op add elementX inputX 18
+op add elementY inputY 18
+draw rect elementX elementY 12 12
+draw color 0x47 0x36 0x23 255
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 6 6
+op add elementX inputX 12
+op add elementY inputY 12
+draw rect elementX elementY 6 6
+op add elementX inputX 18
+op add elementY inputY 18
+draw rect elementX elementY 6 6
+op add elementX inputX 24
+op add elementY inputY 24
+draw rect elementX elementY 6 6
+draw col color 0x7f 0x7f 0x7f 255
+op add elementY inputY 30
+draw rect elementX elementY 24 12
+op add elementX inputX 30
+op add elementY inputY 24
+draw rect elementX elementY 12 24
+op add elementX inputX 12
+op add elementY inputY 42
+draw rect elementX elementY 12 6
+op add elementX inputX 42
+op add elementY inputY 12
+draw rect elementX elementY 6 12
+draw color 0xff 0xff 0xff 255
+op add elementX inputX 30
+op add elementY inputY 30
+draw rect elementX elementY 12 12
+fun close
+
+fun new armor
+draw col color 0x7f 0x7f 0x7f 255
+op add elementX inputX 0
+op add elementY inputY 24
+draw rect elementX elementY 12 24
+op add elementX inputX 36
+draw rect elementX elementY 12 24
+op add elementX inputX 18
+op add elementY inputY 0
+draw rect elementX elementY 12 6
+draw color 0xff 0xff 0xff 255
+op add elementX inputX 6
+op add elementY inputY 12
+draw rect elementX elementY 36 24
+op add elementY inputY 36
+draw rect elementX elementY 12 6
+op add elementX inputX 30
+draw rect elementX elementY 12 6
+op add elementX inputX 12
+op add elementY inputY 6
+draw rect elementX elementY 24 6
+fun close
+
+fun new smallPotion
+draw color 0xc4 0xf4 0xf4 190
+op add elementX inputX 12
+op add elementY inputY 0
+draw rect elementX elementY 24 36
+op add elementY inputY 42
+draw rect elementX elementY 24 6
+draw color 0x73 0x6a 0x4f 255
+op add elementX inputX 18
+op add elementY inputY 36
+draw rect elementX elementY 12 6
+draw color 0x21 0xbc 0x1d 225
+op add elementY inputY 6
+draw rect elementX elementY 12 18
+fun close
+
+fun new largePotion
+draw color 0xc4 0xf4 0xf4 190
+op add elementX inputX 12
+op add elementY inputY 0
+draw rect elementX elementY 24 36
+op add elementY inputY 42
+draw rect elementX elementY 24 6
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 6 24
+op add elementX inputX 36
+draw rect elementX elementY 6 24
+draw color 0x73 0x6a 0x4f 255
+op add elementX inputX 18
+op add elementY inputY 36
+draw rect elementX elementY 12 6
+draw color 0x21 0xbc 0x1d 225
+op add elementX inputX 12
+op add elementY inputY 6
+draw rect elementX elementY 24 18
+fun close
+
+fun new javelin
+draw color 0x62 0x46 0x28 255
+op add elementX inputX 18
+op add elementY inputY 0
+draw rect elementX elementY 6 36
+draw color 0x71 0x87 0x88 255
+op add elementX inputX 12
+op add elementY inputY 36
+draw rect elementX elementY 18 6
+op add elementX inputX 18
+op add elementY inputY 42
+draw rect elementX elementY 6 6
+draw color 0x97 0x68 0x09 255
+op add elementY inputY 24
+draw rect elementX elementY 6 6
+op add elementX inputX 24
+op add elementY inputY 18
+draw rect elementX elementY 6 6
+draw color 0x67 0x54 0x1b 255
+op add elementX inputX 18
+op add elementY inputY 0
+draw rect elementX elementY 6 6
+op add elementY inputY 12
+draw rect elementX elementY 6 6
+fun close
+
+fun new bomb
+draw color 0x1d 0x1d 0x1d 255
+op add elementX inputX 0
+op add elementY inputY 12
+draw rect elementX elementY 42 18
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 30 30
+op add elementX inputX 12
+op add elementY inputY 0
+draw rect elementX elementY 18 42
+draw color 0xfe 0xee 0xcf 255
+op add elementX inputX 30
+op add elementY inputY 42
+draw rect elementX elementY 12 6
+draw color 0xff 0xe8 0x64 230
+op add elementX inputX 42
+op add elementY inputY 36
+draw rect elementX elementY 6 6
+draw color 0x00 0x00 0x00 200
+op add elementX inputX 0
+op add elementY inputY 12
+draw rect elementX elementY 36 18
+op add elementX inputX 12
+op add elementY inputY 0
+draw rect elementX elementY 18 36
+op add elementX inputX 6
+op add elementY inputY 6
+draw rect elementX elementY 30 6
+draw rect elementX elementY 6 30
+fun close
+
+fun new lightBall
+draw color 0xf9 0x18 0x06 180
+op add elementX inputX 12
+op add elementY inputY 12
+draw rect elementX elementY 24 24
+op add elementX inputX 6
+op add elementY inputY 18
+draw rect elementX elementY 36 12
+op add elementX inputX 36
+op add elementY inputY 6
+draw rect elementX elementY 6 6
+op add elementY inputY 36
+draw rect elementX elementY 6 6
+op add elementX inputX 6
+draw rect elementX elementY 6 6
+op add elementX inputX 18
+op add elementY inputY 6
+draw rect elementX elementY 12 36
+op add elementX inputX 6
+draw rect elementX elementY 6 6
+draw color 0xff 0x8f 0x20 100
+op add elementX inputX 18
+op add elementY inputY 12
+draw rect elementX elementY 12 24
+op add elementX inputX 12
+op add elementY inputY 18
+draw rect elementX elementY 24 12
+draw color 0xff 0xf5 0x3e 130
+op add elementX inputX 18
+draw rect elementX elementY 12 12
+fun close
+
+fun new itemsArrowLeft
+draw color 0xff 0xff 0xff 255
+op add elementX inputX 0
+op add elementY inputY 22
+draw rect elementX elementY 2 4
+op add elementX inputX 2
+op add elementY inputY 18
+draw rect elementX elementY 2 12
+op add elementX inputX 4
+op add elementY inputY 14
+draw rect elementX elementY 2 20
+op add elementX inputX 6
+op add elementY inputY 10
+draw rect elementX elementY 2 12
+op add elementY inputY 26
+draw rect elementX elementY 2 12
+fun close
+
+fun new itemsArrowRight
+draw color 0xff 0xff 0xff 255
+op add elementX inputX 6
+op add elementY inputY 22
+draw rect elementX elementY 2 4
+op add elementX inputX 4
+op add elementY inputY 18
+draw rect elementX elementY 2 12
+op add elementX inputX 2
+op add elementY inputY 14
+draw rect elementX elementY 2 20
+op add elementX inputX 0
+op add elementY inputY 10
+draw rect elementX elementY 2 12
+op add elementY inputY 26
+draw rect elementX elementY 2 12
+fun close
+
+fun new dropItemIcon
+draw color 0x40 0x80 0x80 255
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 10 6
+op add elementX inputX 2
+op add elementY inputY 0
+draw rect elementX elementY 6 10
+draw color 0xff 0xff 0xff 255
+op add elementX inputX 0
+op add elementY inputY 4
+draw rect elementX elementY 10 2
+op add elementX inputX 4
+op add elementY inputY 0
+draw rect elementX elementY 2 10
+draw color 0x00 0x00 0x00 255
+op add elementX inputX 12
+draw rect elementX elementY 2 12
+op add elementX inputX 10
+op add elementY inputY 2
+draw rect elementX elementY 6 2
+fun close
+
+fun new dropStackIcon
+draw color 0x61 0xaf 0xaf 255
+op add elementX inputX 0
+op add elementY inputY 2
+draw rect elementX elementY 10 6
+op add elementX inputX 2
+op add elementY inputY 0
+draw rect elementX elementY 6 10
+draw color 0xff 0xff 0x00 255
+op add elementX inputX 0
+op add elementY inputY 4
+draw rect elementX elementY 10 2
+op add elementX inputX 4
+op add elementY inputY 0
+draw rect elementX elementY 2 10
+draw color 0x00 0x00 0x00 255
+op add elementX inputX 12
+draw rect elementX elementY 2 12
+op add elementX inputX 10
+op add elementY inputY 2
+draw rect elementX elementY 6 2
+op add elementX inputX 0
+op add elementY inputY 12
+draw rect elementX elementY 6 2
+op add elementX inputX 2
+op add elementY inputY 10
+draw rect elementX elementY 2 6
+fun close
+
+fun new drawNumber
+for i = digits > 0 -1
+op sub i' i 1
+op pow cut 10 i'
+op idiv digit number cut
+op mod digit digit 10
+op mul shiftCounter digit 3
+op add @counter @counter shiftCounter
+fun have zero
+jump finishDrawingDigit always
+fun have one
+jump finishDrawingDigit always
+fun have two
+jump finishDrawingDigit always
+fun have three
+jump finishDrawingDigit always
+fun have four
+jump finishDrawingDigit always
+fun have five
+jump finishDrawingDigit always
+fun have six
+jump finishDrawingDigit always
+fun have seven
+jump finishDrawingDigit always
+fun have eight
+jump finishDrawingDigit always
+fun have nine
+finishDrawingDigit:
+op add inputX inputX 10
+next
+fun close

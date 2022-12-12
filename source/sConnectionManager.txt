@@ -1,0 +1,126 @@
+spl new players Players 1 1 1 1
+# instruction type, attached data (create: 1/destroy: 2, data index)
+spl new inputProcessorInstruction InputProcessorInstruction 2 4
+
+set connectUnit @mega
+set connectFlag 8080
+set maxPlayerCount 4 # is also min heartbeat index
+op add maxHeartbeatIndex maxPlayerCount 4
+expect cell1 bank1 bank2 bank3 bank4 bank5 bank6 bank7 bank8 bank9 bank10
+sensor cellX cell1 @x
+sensor cellY cell1 @y
+
+for i = 0 < 10 1 # includes the player data bank
+getlink bank i
+sensor writeX bank @x
+sensor writeY bank @y
+op mul index i 2
+write writeX cell1 index
+op add index index 1
+write writeY cell1 index
+next
+op add index index 1
+write -1 cell1 index
+
+for i = maxPlayerCount < maxHeartbeatIndex 1
+write -1 bank1 i
+next
+
+uflag get connectUnit 0
+uflag 7645284
+
+set heartbeatStamp @time
+fun have lockUnit
+
+fun new lockUnit
+bringUnitToCell:
+ucontrol move cellX cellY
+sensor x @unit @x
+op add check x 0.5
+jump bringUnitToCell greaterThan cellX check
+op add check x -0.5
+jump bringUnitToCell greaterThan check cellX
+sensor y @unit @y
+op add check y 0.5
+jump bringUnitToCell greaterThan cellY check
+op add check y -0.5
+jump bringUnitToCell greaterThan check cellY
+fun close
+
+uflag connectFlag
+
+set timeoutStamp @time
+
+don't:
+uflag await 9124786 lockUnit manageHeartbeats
+jump refuseConnection lessThan @time timeoutStamp
+op add timeoutStamp timeoutStamp 2250
+for i = 0 < maxPlayerCount 1
+spl od slot Players i
+jump allocate equal slot 0
+next
+refuseConnection:
+uflag connectFlag
+jump don't always
+
+#
+allocate:
+write 0 bank1 i # clear potential stray input from previously disconnected player(?)
+spl wd 1 Players i
+
+spl wf 1 InputProcessorInstruction 0
+spl wf i InputProcessorInstruction 1
+waitForOtherConnection:
+read free bank1 61
+jump waitForOtherConnection notEqual free 0
+write inputProcessorInstruction bank1 61
+
+op add sendData 847300 i
+
+op add playerCount playerCount 1
+op min playerCount playerCount maxPlayerCount
+write playerCount bank1 62
+fun have printMessage
+write players bank1 63
+op add heartbeatIndex i maxPlayerCount
+write 12 bank1 heartbeatIndex
+
+uflag sendData
+jump don't always
+#
+
+fun new manageHeartbeats
+op sub checkElapsedTime @time heartbeatStamp
+jump don't lessThanEq checkElapsedTime 1200
+for i = maxPlayerCount < maxHeartbeatIndex 1
+read heartbeat bank1 i
+jump skip1 greaterThan heartbeat 0 # no need for disconnect
+jump skip2 equal heartbeat -1 # already disconnected
+op sub clearSlot i maxPlayerCount
+spl wf 2 InputProcessorInstruction 0
+spl wf clearSlot InputProcessorInstruction 1
+
+waitForOtherDisconnection:
+read free bank1 61
+jump waitForOtherDisconnection notEqual free 0
+
+write inputProcessorInstruction bank1 61
+spl cd Players clearSlot
+op sub playerCount playerCount 1
+op max playerCount playerCount 0
+write players bank1 63
+write playerCount bank1 62
+fun have printMessage
+skip1:
+op sub heartbeat heartbeat 1
+write heartbeat bank1 i
+skip2:
+next
+set heartbeatStamp @time
+fun close
+
+fun new printMessage
+print "[\#83CDFB]mRPG 3: [\#1F9A33]Mythic Heroes\n[][]Connected players: "
+print playerCount
+pf message1
+fun close

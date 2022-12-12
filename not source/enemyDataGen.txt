@@ -1,0 +1,63 @@
+spl new players Players 1 * 4
+# t1024, hairType, bodyType, hairPalette, bodyPalette, direction, lightBallLight, enabled...
+spl new playerData PlayerData 10:T1024 2:HairType 2:BodyType 15:HairPalette 15:BodyPalette 2:Direction 5:LightBallLighting 1:Enabled
+spl new playerData PackedPlayerData 10:T1024 36:RandomData
+spl new playerStats PlayerStats 12:PlayerHealth 12:PlayerHealthMax 4:ItemCount 16:Score 4:WeaponIndex 4:ArmorIndex
+
+spl new playerInput PlayerInput 5 * 2 0:Input 1:Data
+
+# instruction type, attached data (create: 1/disable: 2/enable all: 3, data index), last moved direction
+spl new inputProcessorInstruction InputProcessorInstruction 2:Type 4:Data
+# client-side essential world data (map count, visionReduction, fog palette (rgba and random added alpha)) (reminder to self: switch fog palettes server-side after a set amount of turns because we need cool effects!)
+
+spl new fogData FogData 5 5 5 5 5 5 8
+spl label FogData 0:Density 1:R 2:G 3:B 4:A 5:RandA 6:Duration
+spl new fogData PackedFogData 42:PackedValues 7:IgnoredValues
+spl new worldData WorldData 5 * 7 0:MapCount 1:FogDensity 2:FogR 3:FogG 4:FogB 5:FogA 6:FogRandA
+spl new worldData WorldDataFogInsert 5:SkippedValues 30:InsertFogData
+
+spl new mem510 Mem510 5 * 4 0:X 1:Y 2:Width 3:Height 4:FogTurnCount
+spl new mem511 Mem511 24:FloorPalette 24:WallPalette 12:EnemyCount
+
+spl new tileData TileData 11 * 4
+spl new subtileData SubtileData 2:Type 9:Content
+
+# item data lmao (type, floor alpha, quantity, effect, effectStrength) / effect / effect strength is used in special effects or consumable effects
+spl new itemData ItemData 10:T1024 8:ItemType 8:FloorAlpha 8:Quantity 4:Effect 8:EffectStrength
+# itemCategory, itemSubtype (categories 0: weapon, 1: armor, 2: consumable)
+spl new itemType ItemType 4 * 2 0:Category 1:Subtype
+# the splitter below will not see usage in rendering, remove it later
+# only for gear usage and leveling, gone unused by consumables
+spl new itemStats ItemStats 11 * 4 0:Value 1:ValueMax 2:Exp 3:ExpMax
+spl new itemStats ItemLevel 44:SkippedValues 4:Level 4:LevelMax
+
+spl new entityData EntityData 10 8 8 4 6 6 1 1 2
+spl label EntityData 0:T1024 1:EntityType 2:FloorAlpha 3:Effect 4:EffectTimer 5:EffectCooldown 6:EffectRequiresTargeting 7:ShotByPlayer 8:Owner # whether the projectile was shot by a player, give exp in case
+# hint: effects with a cooldown of 0 are strictly ondeath (cooldown of 1 achieves per-turn effect)
+# entityCategory, entitySubtype
+spl new entityType EntityType 4 * 2 0:Category 1:Subtype
+spl new entityStats EnemyStats 12:Health 12:HealthMax 12:Damage 10:Reward
+spl new entityStats ProjectileStats 12:Damage 4:BlastRadius 12:BlastDamage 2:MovementDirection
+
+spl new enemyBehavior EnemyBehavior 4 * 10 # half-bytes to determine behaviors for enemies
+spl new testOrders TestOrders 8 * 4
+spl new testOrder TestOrder 2 * 4
+spl new testOrders AllTestOrders 2 * 16
+
+spl wf 1 EntityType Category
+spl wf 0 EntityType Subtype
+
+set health 22
+set damage 7
+
+spl wf 2 EnemyStats Reward
+
+spl wf health EnemyStats Health
+spl wf health EnemyStats HealthMax
+spl wf damage EnemyStats Damage
+spl wf entityType EntityData EntityType
+print "\nset entityData "
+print entityData
+print "\nset entityStats "
+print entityStats
+pf message1
